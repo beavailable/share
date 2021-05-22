@@ -120,14 +120,12 @@ class BaseHandler(BaseHTTPRequestHandler):
         self.wfile.write(response)
 
     def respond_redirect(self, location):
-        self.close_connection = True
         self.send_response(HTTPStatus.SEE_OTHER)
         self.send_content_length(0)
         self.send_location(location)
         self.end_headers()
 
     def respond_redirect_cookie(self, location, cookie):
-        self.close_connection = True
         self.send_response(HTTPStatus.SEE_OTHER)
         self.send_content_length(0)
         self.send_location(location)
@@ -796,6 +794,8 @@ class MultipartParser:
                 if next == self.terminator:
                     if len(line) > 2:
                         out.write(line[:-2])
+                    if self.reader.has_next():
+                        raise MultipartError
                     self.state = MultipartState.END
                     return
                 out.write(line)
