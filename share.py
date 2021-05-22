@@ -315,7 +315,7 @@ class FileSendHandler(BaseHandler):
                         files.append((name, size))
         else:
             for f in self.files:
-                files.append((os.path.basename(f), os.path.getsize(f)))
+                files.append((os.path.basename(f), self.format_size(os.path.getsize(f))))
         dirs.sort(key=functools.cmp_to_key(self.cmp_path))
         files.sort(key=functools.cmp_to_key(lambda s1, s2: self.cmp_path(s1[0], s2[0])))
         return (dirs, files)
