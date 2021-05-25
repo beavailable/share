@@ -17,6 +17,15 @@ import stat
 import re
 
 
+class ShareServer(ThreadingHTTPServer):
+
+    def handle_error(self, request, client_address):
+        t, value, traceback = sys.exc_info()
+        if issubclass(t, ConnectionError):
+            return
+        super().handle_error(request, client_address)
+
+
 class BaseHandler(BaseHTTPRequestHandler):
 
     protocol_version = 'HTTP/1.1'
@@ -946,7 +955,7 @@ def main():
                 handler_class = functools.partial(FileSendHandler, dir=dir, all=args.all, password=args.password)
             else:
                 handler_class = functools.partial(FileSendHandler, files=files, password=args.password)
-    with ThreadingHTTPServer(parse_address(args.address[0]), handler_class) as server:
+    with ShareServer(parse_address(args.address[0]), handler_class) as server:
         host, port = server.socket.getsockname()[:2]
         sys.stderr.write(f'Serving HTTP on {host} port {port} ...\n')
         server.serve_forever()
