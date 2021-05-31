@@ -34,13 +34,13 @@ optional arguments:
 # 提示
 如果你只有一个文件需要分享，下面这个简化的 url 可以帮助你快速访问到这个文件：
 ```
-http://ip:port/file
+http://{host}:{port}/file
 ```
 使用命令行工具下载文件时，如果需要保留原始文件名，则可以用：
 ```
-wget --content-disposition http://ip:port/file
+wget --content-disposition http://{host}:{port}/file
 ```
 或者是：
 ```
-curl -OJ http://ip:port/file
+curl -OJ http://{host}:{port}/file
 ```
