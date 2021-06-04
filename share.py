@@ -459,7 +459,7 @@ class FileSendHandler(BaseHandler):
                 i += 1
             elif 48 <= ch1 <= 57 and 48 <= ch2 <= 57:
                 num1, idx1 = self.check_number(s1, len1, i)
-                num2, idx2 = self.check_number(s2, len1, i)
+                num2, idx2 = self.check_number(s2, len2, i)
                 if num1 != num2:
                     return num1 - num2
                 i = idx1
