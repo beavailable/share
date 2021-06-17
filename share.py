@@ -173,6 +173,12 @@ class BaseHandler(BaseHTTPRequestHandler):
         self.send_content_length(0)
         self.end_headers()
 
+    def respond_internal_server_error(self):
+        self.close_connection = True
+        self.send_response(HTTPStatus.INTERNAL_SERVER_ERROR)
+        self.send_content_length(0)
+        self.end_headers()
+
     def log_request(self, code, size=None):
         if isinstance(code, HTTPStatus):
             code = code.value
@@ -532,6 +538,9 @@ class FileReceiveHandler(BaseHandler):
             self.respond_bad_request()
             return
         content_length = int(content_length)
+        if not self.check_disk(content_length):
+            self.respond_internal_server_error()
+            return
         content_type = self.headers['Content-Type']
         if not content_type:
             self.respond_bad_request()
@@ -558,6 +567,13 @@ class FileReceiveHandler(BaseHandler):
             self.respond_bad_request()
         except PermissionError:
             self.respond_forbidden()
+
+    def check_disk(self, content_length):
+        path = self.dir
+        if is_windows():
+            path, _ = os.path.splitdrive(path)
+        total, used, free = shutil.disk_usage(path)
+        return free - content_length >= 1073741824
 
     def parse_boundary(self, content_type):
         parts = content_type.split('; ')
