@@ -297,7 +297,7 @@ class FileSendHandler(BaseHandler):
                 self.send_content_disposition(filename)
             self.end_headers()
             with f:
-                shutil.copyfileobj(f, self.wfile)
+                self.copy_file(f, self.wfile)
             return
         content_range = self.parse_range(content_range, filesize)
         if not content_range:
@@ -315,8 +315,7 @@ class FileSendHandler(BaseHandler):
             self.send_content_disposition(filename)
         self.end_headers()
         with f:
-            f.seek(start)
-            shutil.copyfileobj(f, self.wfile, content_length)
+            self.copy_file_range(f, self.wfile, start, content_length)
 
     def list_dir(self, path):
         dirs, files = [], []
@@ -447,6 +446,23 @@ class FileSendHandler(BaseHandler):
         if start > end or end >= filesize:
             return None
         return (start, end)
+
+    def copy_file(self, src, dest):
+        while True:
+            data = src.read(65536)
+            if not data:
+                return
+            dest.write(data)
+
+    def copy_file_range(self, src, dest, start, length):
+        src.seek(start)
+        buf_size = 65536
+        while length:
+            if length <= buf_size:
+                dest.write(src.read(length))
+                return
+            dest.write(src.read(buf_size))
+            length -= buf_size
 
     def cmp_path(self, s1, s2):
         if s1[0] == '.' and s2[0] != '.':
