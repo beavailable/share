@@ -187,7 +187,7 @@ class BaseHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         year, month, day, hh, mm, ss, x, y, z = time.localtime()
         t = f'{year:04}/{month:02}/{day:02} {hh:02}:{mm:02}:{ss:02}'
-        sys.stdout.write('%s - %s - %s\n' % (t, self.address_string(), format % args))
+        sys.stderr.write('%s - %s - %s\n' % (t, self.address_string(), format % args))
 
 
 class FileSendHandler(BaseHandler):
