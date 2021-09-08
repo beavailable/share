@@ -115,10 +115,6 @@ class BaseHandler(BaseHTTPRequestHandler):
     def send_content_range(self, start, end, filesize):
         self.send_header('Content-Range', f'bytes {start}-{end}/{filesize}')
 
-    def send_content_disposition(self, filename):
-        filename = parse.quote(filename)
-        self.send_header('Content-Disposition', f'attachment;filename="{filename}"')
-
     def send_cookie(self, cookie):
         self.send_header('Set-Cookie', cookie)
 
@@ -206,7 +202,7 @@ class FileSendHandler(BaseHandler):
         super().__init__(*args, password=password)
 
     def do_get(self):
-        path, params = self.split_path(parse.unquote(self.path))
+        path, _ = self.split_path(parse.unquote(self.path))
         if not self.can_respond(path):
             self.respond_not_found()
             return
@@ -216,7 +212,7 @@ class FileSendHandler(BaseHandler):
                 return
             self.respond_for_dir(path)
         elif self.is_file(path):
-            self.respond_for_file(path, params)
+            self.respond_for_file(path)
         else:
             self.respond_not_found()
 
@@ -273,7 +269,7 @@ class FileSendHandler(BaseHandler):
             return
         self.respond_ok(self.build_html(path, dirs, files))
 
-    def respond_for_file(self, path, params):
+    def respond_for_file(self, path):
         file = self.get_file(path)
         try:
             f = open(file, 'rb')
@@ -283,7 +279,6 @@ class FileSendHandler(BaseHandler):
         except FileNotFoundError:
             self.respond_not_found()
             return
-        download = params.get('action') != 'view'
         filename = os.path.basename(file)
         filesize = os.path.getsize(file)
         content_type = self.guess_type(file)
@@ -293,8 +288,6 @@ class FileSendHandler(BaseHandler):
             self.send_content_length(filesize)
             self.send_content_type(content_type)
             self.send_accept_ranges()
-            if download:
-                self.send_content_disposition(filename)
             self.end_headers()
             with f:
                 self.copy_file(f, self.wfile)
@@ -311,8 +304,6 @@ class FileSendHandler(BaseHandler):
         self.send_content_type(content_type)
         self.send_accept_ranges()
         self.send_content_range(start, end, filesize)
-        if download:
-            self.send_content_disposition(filename)
         self.end_headers()
         with f:
             self.copy_file_range(f, self.wfile, start, content_length)
@@ -371,7 +362,7 @@ class FileSendHandler(BaseHandler):
         builder.append('function view_file(){')
         builder.append('src = this.getAttribute("src");')
         builder.append('var frame = document.createElement("iframe");')
-        builder.append('frame.setAttribute("src",src+"?action=view");')
+        builder.append('frame.setAttribute("src",src);')
         builder.append('frame.setAttribute("allow","fullscreen");')
         builder.append('frame.setAttribute("width","100%");')
         builder.append('frame.setAttribute("height","100%");')
@@ -411,7 +402,7 @@ class FileSendHandler(BaseHandler):
         for f, size in files:
             f = html.escape(f)
             builder.append('<div>')
-            builder.append(f'<a href="{f}">')
+            builder.append(f'<a href="{f}" download>')
             builder.append(f'<span class="icon"><svg xmlns="http://www.w3.org/2000/svg" height="16px" viewBox="0 0 24 24" width="16px" fill="#5f6368"><path d="M0 0h24v24H0z" fill="none"/><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg></span>')
             builder.append(f'{f}</a>')
             builder.append(f'&nbsp;<span class="size">({size})</span>')
