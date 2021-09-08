@@ -36,11 +36,3 @@ optional arguments:
 ```
 http://{host}:{port}/file
 ```
-使用命令行工具下载文件时，如果需要保留原始文件名，则可以用：
-```
-wget --content-disposition http://{host}:{port}/file
-```
-或者是：
-```
-curl -OJ http://{host}:{port}/file
-```
