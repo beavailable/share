@@ -279,33 +279,31 @@ class FileSendHandler(BaseHandler):
         except FileNotFoundError:
             self.respond_not_found()
             return
-        filename = os.path.basename(file)
-        filesize = os.path.getsize(file)
-        content_type = self.guess_type(file)
-        content_range = self.headers['Range']
-        if filesize == 0 or not content_range:
-            self.send_response(HTTPStatus.OK)
-            self.send_content_length(filesize)
+        with f:
+            filename = os.path.basename(file)
+            filesize = os.path.getsize(file)
+            content_type = self.guess_type(file)
+            content_range = self.headers['Range']
+            if filesize == 0 or not content_range:
+                self.send_response(HTTPStatus.OK)
+                self.send_content_length(filesize)
+                self.send_content_type(content_type)
+                self.send_accept_ranges()
+                self.end_headers()
+                self.copy_file(f, self.wfile)
+                return
+            content_range = self.parse_range(content_range, filesize)
+            if not content_range:
+                self.respond_range_not_satisfiable()
+                return
+            start, end = content_range
+            content_length = end - start + 1
+            self.send_response(HTTPStatus.PARTIAL_CONTENT)
+            self.send_content_length(content_length)
             self.send_content_type(content_type)
             self.send_accept_ranges()
+            self.send_content_range(start, end, filesize)
             self.end_headers()
-            with f:
-                self.copy_file(f, self.wfile)
-            return
-        content_range = self.parse_range(content_range, filesize)
-        if not content_range:
-            self.respond_range_not_satisfiable()
-            f.close()
-            return
-        start, end = content_range
-        content_length = end - start + 1
-        self.send_response(HTTPStatus.PARTIAL_CONTENT)
-        self.send_content_length(content_length)
-        self.send_content_type(content_type)
-        self.send_accept_ranges()
-        self.send_content_range(start, end, filesize)
-        self.end_headers()
-        with f:
             self.copy_file_range(f, self.wfile, start, content_length)
 
     def list_dir(self, path):
