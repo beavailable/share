@@ -178,7 +178,7 @@ class BaseHandler(BaseHTTPRequestHandler):
     def log_request(self, code, size=None):
         if isinstance(code, HTTPStatus):
             code = code.value
-        self.log_message('%s %s %s', self.command, parse.unquote(self.path), str(code))
+        self.log_message('%s %s %s', self.command, str(code), parse.unquote(self.path))
 
     def log_message(self, format, *args):
         year, month, day, hh, mm, ss, x, y, z = time.localtime()
