@@ -115,6 +115,10 @@ class BaseHandler(BaseHTTPRequestHandler):
     def send_content_range(self, start, end, filesize):
         self.send_header('Content-Range', f'bytes {start}-{end}/{filesize}')
 
+    def send_content_disposition(self, filename):
+        filename = parse.quote(filename)
+        self.send_header('Content-Disposition', f'attachment;filename="{filename}"')
+
     def send_cookie(self, cookie):
         self.send_header('Set-Cookie', cookie)
 
@@ -199,6 +203,7 @@ class FileSendHandler(BaseHandler):
             for f in files:
                 if os.path.isfile(f):
                     self.files.append(os.path.realpath(f))
+        self.ua_prefixes = {'curl', 'Wget', 'wget2', 'aria2', 'Axel'}
         super().__init__(*args, password=password)
 
     def do_get(self):
@@ -212,9 +217,16 @@ class FileSendHandler(BaseHandler):
                 return
             self.respond_for_dir(path)
         elif self.is_file(path):
-            self.respond_for_file(path)
+            self.respond_for_file(path, self.is_from_commandline())
         else:
             self.respond_not_found()
+
+    def is_from_commandline(self):
+        ua = self.headers['User-Agent']
+        if not ua:
+            return False
+        prefix = ua.split('/', 1)[0]
+        return prefix in self.ua_prefixes
 
     def split_path(self, path):
         parts = path.split('?', 1)
@@ -269,7 +281,7 @@ class FileSendHandler(BaseHandler):
             return
         self.respond_ok(self.build_html(path, dirs, files))
 
-    def respond_for_file(self, path):
+    def respond_for_file(self, path, include_content_disposition):
         file = self.get_file(path)
         try:
             f = open(file, 'rb')
@@ -289,6 +301,8 @@ class FileSendHandler(BaseHandler):
                 self.send_content_length(filesize)
                 self.send_content_type(content_type)
                 self.send_accept_ranges()
+                if include_content_disposition:
+                    self.send_content_disposition(filename)
                 self.end_headers()
                 self.copy_file(f, self.wfile)
                 return
@@ -303,6 +317,8 @@ class FileSendHandler(BaseHandler):
             self.send_content_type(content_type)
             self.send_accept_ranges()
             self.send_content_range(start, end, filesize)
+            if include_content_disposition:
+                self.send_content_disposition(filename)
             self.end_headers()
             self.copy_file_range(f, self.wfile, start, content_length)
 
