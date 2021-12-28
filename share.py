@@ -789,7 +789,6 @@ class MultipartParser:
         self.separator = f'--{boundary}\r\n'.encode()
         self.terminator = f'--{boundary}--\r\n'.encode()
         self.state = MultipartState.INIT
-        self.headers = {}
         self.content_disposition = re.compile(r'^form-data; name="(.+)"; filename="(.+)"\r\n$')
         self.name = None
         self.filename = None
@@ -852,7 +851,6 @@ class MultipartParser:
     def _parse_headers(self):
         if self.state != MultipartState.HEADER_START:
             raise MultipartError
-        self.headers = {}
         self.name = None
         self.filename = None
         while True:
@@ -872,8 +870,6 @@ class MultipartParser:
                     raise MultipartError
                 self.name = match.group(1)
                 self.filename = match.group(2)
-            else:
-                self.headers[key] = value
         if not self.name or not self.filename:
             raise MultipartError
 
