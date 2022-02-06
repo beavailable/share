@@ -906,6 +906,12 @@ class MultipartError(ValueError):
     pass
 
 
+def get_best_family(host, port):
+    info = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM, flags=socket.AI_PASSIVE)
+    family, type, proto, canonname, addr = info[0]
+    return family, addr
+
+
 def is_windows():
     return os.name == 'nt'
 
@@ -914,21 +920,6 @@ def on_interrupt(a, b):
     if not is_windows():
         sys.stderr.write('\n')
     sys.exit(1)
-
-
-def parse_address(address):
-    parts = address.split(':')
-    if len(parts) == 1:
-        if parts[0].isdecimal():
-            return ('0.0.0.0', int(parts[0]))
-        else:
-            return (parts[0], 8888)
-    host, port = parts
-    if not host:
-        host = '0.0.0.0'
-    if not port:
-        port = 8888
-    return (host, int(port))
 
 
 def print_prompt():
@@ -942,11 +933,12 @@ def main():
     sys.tracebacklimit = 0
     signal.signal(signal.SIGINT, on_interrupt)
     parser = argparse.ArgumentParser(allow_abbrev=False)
-    parser.add_argument('-b', '--bind', dest='address', metavar='ADDR:PORT', nargs=1, default=['0.0.0.0:8888'], help='bind address [default: 0.0.0.0:8888]')
+    parser.add_argument('-b', '--bind', dest='address', help='bind address [default: all interfaces]')
+    parser.add_argument('-p', '--port', type=int, default=8888, help='port [default: 8888]')
     parser.add_argument('-a', '--all', action='store_true', help='show all files, including hidden ones')
     parser.add_argument('-t', '--text', action='store_true', help='text mode')
     parser.add_argument('-r', '--receive', action='store_true', help='receive mode')
-    parser.add_argument('-p', '--password', nargs='?', const=os.getenv('SHARE_PASSWORD'), help='access password, if no PASSWORD is specified, the environment variable SHARE_PASSWORD will be used')
+    parser.add_argument('-P', '--password', nargs='?', const=os.getenv('SHARE_PASSWORD'), help='access password, if no PASSWORD is specified, the environment variable SHARE_PASSWORD will be used')
     parser.add_argument('arguments', nargs='*', help='a directory, files or texts')
     args = parser.parse_args()
     if args.password and len(args.password) < 3:
@@ -987,7 +979,8 @@ def main():
                 handler_class = functools.partial(FileSendHandler, dir=dir, all=args.all, password=args.password)
             else:
                 handler_class = functools.partial(FileSendHandler, files=files, password=args.password)
-    with ShareServer(parse_address(args.address[0]), handler_class) as server:
+    ShareServer.address_family, addr = get_best_family(args.address, args.port)
+    with ShareServer(addr, handler_class) as server:
         host, port = server.socket.getsockname()[:2]
         sys.stderr.write(f'Serving HTTP on {host} port {port} ...\n')
         server.serve_forever()
