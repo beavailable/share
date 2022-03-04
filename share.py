@@ -256,8 +256,7 @@ class FileSendHandler(BaseHandler):
         for f in self.files:
             if path == os.path.basename(f):
                 return True
-        if path == 'file' and len(self.files) == 1:
-            return True
+        return path == 'file' and len(self.files) == 1
 
     def get_file(self, path):
         if self.dir:
