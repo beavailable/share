@@ -787,7 +787,9 @@ class HtmlBuilder:
 class MultipartParser:
 
     def __init__(self, stream, boundary, content_length):
-        self.reader = MultipartReader(stream, content_length)
+        self.stream = stream
+        self.content_length = content_length
+        self.read_length = 0
         self.separator = f'--{boundary}\r\n'.encode()
         self.terminator = f'--{boundary}--\r\n'.encode()
         self.state = MultipartState.INIT
@@ -797,15 +799,14 @@ class MultipartParser:
 
     def has_next(self):
         if self.state == MultipartState.INIT:
-            if not self.reader.has_next() or self.reader.next_line() != self.separator:
+            if self._next_line() != self.separator:
                 raise MultipartError
             self.state = MultipartState.HEADER_START
         if self.state == MultipartState.HEADER_START:
             self._parse_headers()
-            if self.state != MultipartState.PART_START:
-                raise MultipartError
+            self.state = MultipartState.PART_START
             return True
-        if self.state == MultipartState.END:
+        if self.state == MultipartState.END and self.read_length == self.content_length:
             return False
         raise MultipartError
 
@@ -825,13 +826,9 @@ class MultipartParser:
         line, next = None, None
         while True:
             if not line:
-                if not self.reader.has_next():
-                    raise MultipartError
-                line = self.reader.next_line()
+                line = self._next_line()
             if len(line) >= 2 and line[-2:] == b'\r\n':
-                if not self.reader.has_next():
-                    raise MultipartError
-                next = self.reader.next_line()
+                next = self._next_line()
                 if next == self.separator:
                     if len(line) > 2:
                         out.write(line[:-2])
@@ -840,8 +837,6 @@ class MultipartParser:
                 if next == self.terminator:
                     if len(line) > 2:
                         out.write(line[:-2])
-                    if self.reader.has_next():
-                        raise MultipartError
                     self.state = MultipartState.END
                     return
                 out.write(line)
@@ -851,16 +846,11 @@ class MultipartParser:
                 line = None
 
     def _parse_headers(self):
-        if self.state != MultipartState.HEADER_START:
-            raise MultipartError
         self.name = None
         self.filename = None
         while True:
-            if not self.reader.has_next():
-                raise MultipartError
-            line = self.reader.next_line().decode()
+            line = self._next_line().decode()
             if line == '\r\n':
-                self.state = MultipartState.PART_START
                 break
             parts = line.split(': ')
             if len(parts) != 2:
@@ -875,6 +865,16 @@ class MultipartParser:
         if not self.name or not self.filename:
             raise MultipartError
 
+    def _next_line(self):
+        if self.read_length >= self.content_length:
+            raise MultipartError
+        l = min(65536, self.content_length - self.read_length)
+        line = self.stream.readline(l)
+        if not line:
+            raise MultipartError
+        self.read_length += len(line)
+        return line
+
 
 class MultipartState:
 
@@ -882,26 +882,6 @@ class MultipartState:
     HEADER_START = 1
     PART_START = 2
     END = 3
-
-
-class MultipartReader:
-
-    def __init__(self, stream, total_length):
-        self.stream = stream
-        self.total_length = total_length
-        self.read_len = 0
-
-    def has_next(self):
-        return self.read_len < self.total_length
-
-    def next_line(self):
-        line = self.stream.readline(65536)
-        if not line:
-            raise MultipartError
-        self.read_len += len(line)
-        if self.read_len > self.total_length:
-            raise MultipartError
-        return line
 
 
 class MultipartError(ValueError):
