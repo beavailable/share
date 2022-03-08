@@ -200,9 +200,7 @@ class FileSendHandler(BaseHandler):
             self.dir = dir
             self.all = all
         elif files:
-            for f in files:
-                if os.path.isfile(f):
-                    self.files.append(os.path.realpath(f))
+            self.files = [os.path.realpath(f) for f in files if os.path.isfile(f)]
         self.ua_prefixes = {'curl', 'Wget', 'wget2', 'aria2', 'Axel'}
         super().__init__(*args, password=password)
 
@@ -327,28 +325,32 @@ class FileSendHandler(BaseHandler):
             path = self.dir + path
             for name in os.listdir(path):
                 abs_path = path + name
-                if self.can_show_file(abs_path):
+                hidden = self.is_hidden(abs_path)
+                if self.all or not hidden:
                     if os.path.isdir(abs_path):
-                        dirs.append(name)
+                        items = []
+                        try:
+                            items = [f for f in os.listdir(abs_path) if self.all or not self.is_hidden(f'{abs_path}/{f}')]
+                        except:
+                            pass
+                        dirs.append((name, hidden, len(items)))
                     else:
                         size = self.format_size(os.path.getsize(abs_path))
-                        files.append((name, size))
+                        files.append((name, hidden, size))
         else:
             for f in self.files:
                 try:
-                    files.append((os.path.basename(f), self.format_size(os.path.getsize(f))))
-                except FileNotFoundError:
+                    files.append((os.path.basename(f), False, self.format_size(os.path.getsize(f))))
+                except:
                     pass
-        dirs.sort(key=functools.cmp_to_key(self.cmp_path))
+        dirs.sort(key=functools.cmp_to_key(lambda s1, s2: self.cmp_path(s1[0], s2[0])))
         files.sort(key=functools.cmp_to_key(lambda s1, s2: self.cmp_path(s1[0], s2[0])))
         return (dirs, files)
 
-    def can_show_file(self, file):
-        if self.all:
+    def is_hidden(self, file):
+        if is_windows() and os.stat(file).st_file_attributes & stat.FILE_ATTRIBUTE_HIDDEN != 0:
             return True
-        if is_windows() and os.stat(file).st_file_attributes & stat.FILE_ATTRIBUTE_HIDDEN == 0:
-            return True
-        return not os.path.basename(file).startswith('.')
+        return os.path.basename(file).startswith('.')
 
     def build_html(self, path, dirs, files):
         path = path.rstrip('/')
@@ -363,15 +365,20 @@ class FileSendHandler(BaseHandler):
         builder.end_title()
         builder.start_style()
         builder.append('.container{height: 100%; display: flex; flex-direction: column; padding: 0 8px; overflow-wrap: break-word;}')
-        builder.append('.header{margin-top: 8px; font-size: larger;}')
-        builder.append('hr{margin-bottom: 0; width: 100%;}')
-        builder.append('.main{flex: 1; display: flex; flex-direction: column; padding: 16px 8px;}')
-        builder.append('.icon{vertical-align: middle; margin-right: 4px;}')
-        builder.append('.size{color: #666666; font-size: smaller;}')
+        builder.append('.header{padding: 8px 0; font-size: x-large;}')
+        builder.append('hr{width: 100%;}')
+        builder.append('.main{flex: auto; display: flex; flex-direction: column; padding: 16px 0;}')
+        builder.append('.list-item{display: flex; justify-content: space-between; padding: 2px 0; word-break: break-all;}')
+        builder.append('.list-item:nth-child(even){background-color: #f8f8f8;}')
+        builder.append('.item-left{display: flex}')
+        builder.append('.item-right{min-width: 140px; max-width: 140px; text-align: right;}')
+        builder.append('.item-icon{flex: none; margin-right: 4px;}')
+        builder.append('.size{color: #666666;}')
         builder.append('iframe{border: 0;}')
-        builder.append('a{color: #2440b3; text-decoration: none;}')
+        builder.append('a{color: #2965c7; text-decoration: none;}')
+        builder.append('a.hidden{color: #42a5f5;}')
         builder.append('a:hover{color:#ff5500;}')
-        builder.append('button{cursor: pointer; border: 1px solid #cccccc; color: #333333; background-color: white; border-radius: 4px;}')
+        builder.append('button{padding: 2px 4px; cursor: pointer; border: 1px solid #cccccc; color: #333333; background-color: white; border-radius: 4px;}')
         builder.append('button:hover{background-color: #e6e6e6;}')
         builder.end_style()
         builder.start_script()
@@ -406,22 +413,28 @@ class FileSendHandler(BaseHandler):
         builder.append('</div>')
         builder.append('<hr>')
         builder.append('<div class="main">')
-        builder.append('<div id="content">')
-        for d in dirs:
-            builder.append('<div>')
-            builder.append(f'<a href="{html.escape(parse.quote(d))}/">')
-            builder.append(f'<span class="icon"><svg xmlns="http://www.w3.org/2000/svg" height="16px" viewBox="0 0 24 24" width="16px" fill="#5f6368"><path d="M0 0h24v24H0z" fill="none"/><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg></span>')
-            builder.append(f'{html.escape(d)}</a>')
-            builder.append('</div>')
-        for f, size in files:
-            builder.append('<div>')
-            builder.append(f'<a href="{html.escape(parse.quote(f))}" download>')
-            builder.append(f'<span class="icon"><svg xmlns="http://www.w3.org/2000/svg" height="16px" viewBox="0 0 24 24" width="16px" fill="#5f6368"><path d="M0 0h24v24H0z" fill="none"/><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg></span>')
-            builder.append(f'{html.escape(f)}</a>')
-            builder.append(f'&nbsp;<span class="size">({size})</span>')
-            builder.append(f'&nbsp;<button class="btn_view" src="{html.escape(parse.quote(f))}">View</button>')
-            builder.append('</div>')
-        builder.append('</div>')
+        builder.append('<ul id="content">')
+        for d, hidden, items in dirs:
+            builder.append('<li class="list-item">')
+            builder.append(f'<a class="item-left{" hidden" if hidden else ""}" href="{html.escape(parse.quote(d))}/">')
+            builder.append('<svg class="item-icon" xmlns="http://www.w3.org/2000/svg" height="20" viewBox="0 0 24 24" width="20px" fill="#5f6368"><path d="M0 0h24v24H0z" fill="none"/><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>')
+            builder.append(f'{html.escape(d)}')
+            builder.append('</a>')
+            builder.append('<span class="item-right">')
+            builder.append(f'<span class="size">{items} {"item" if items == 1 else "items"}</span>')
+            builder.append('</span>')
+            builder.append('</li>')
+        for f, hidden, size in files:
+            builder.append('<li class="list-item">')
+            builder.append(f'<a class="item-left{" hidden" if hidden else ""}" href="{html.escape(parse.quote(f))}" download>')
+            builder.append('<svg class="item-icon" xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 0 24 24" width="20px" fill="#5f6368"><path d="M0 0h24v24H0z" fill="none"/><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>')
+            builder.append(f'{html.escape(f)}')
+            builder.append('</a>')
+            builder.append('<span class="item-right">')
+            builder.append(f'<span class="size">{size}</span>&nbsp;<button class="btn_view" src="{html.escape(parse.quote(f))}">View</button>')
+            builder.append('</span>')
+            builder.append('</li>')
+        builder.append('</ul>')
         builder.append('</div>')
         builder.append('</div>')
         builder.end_body()
@@ -504,7 +517,7 @@ class FileSendHandler(BaseHandler):
         return (num, end)
 
     def format_size(self, size):
-        lst = ((1024, 'KB'), (1048576, 'MB'), (1073741824, 'GB'), (1099511627776, 'TB'))
+        lst = ((1024, 'KiB'), (1048576, 'MiB'), (1073741824, 'GiB'), (1099511627776, 'TiB'))
         idx = 0
         if size < 1048576:
             idx = 0
@@ -631,7 +644,7 @@ class TextSendHandler(BaseHandler):
         builder.end_title()
         builder.start_style()
         builder.append('.container{height: 100%; display: flex; flex-direction: column;}')
-        builder.append('.content{flex: 1; margin: 10% 8px; word-wrap: break-word; white-space: pre-wrap; overflow-y: auto;}')
+        builder.append('.content{flex: auto; margin: 10% 8px; word-wrap: break-word; white-space: pre-wrap; overflow-y: auto;}')
         builder.end_style()
         builder.start_body()
         builder.append('<div class="container">')
@@ -662,8 +675,8 @@ class TextReceiveHandler(BaseHandler):
         builder.end_title()
         builder.start_style()
         builder.append('.container{height: 100%; display: flex; flex-direction: column;}')
-        builder.append('.content{flex: 1; margin: 10% 8px; display: flex; flex-direction: column;}')
-        builder.append('.textarea{box-sizing: border-box; flex: 1; width: 100%;}')
+        builder.append('.content{flex: auto; margin: 10% 8px; display: flex; flex-direction: column;}')
+        builder.append('.textarea{flex: auto; width: 100%;}')
         builder.append('.submit{width: 100%;}')
         builder.end_style()
         builder.start_script()
@@ -744,19 +757,20 @@ class HtmlBuilder:
     def start_style(self):
         self.out.write('<style type="text/css">')
         self.out.write('@media (min-width: 576px) {')
-        self.out.write('body{width: 100%;}')
-        self.out.write('}')
-        self.out.write('@media (min-width: 768px) {')
         self.out.write('body{width: 80%;}')
         self.out.write('}')
-        self.out.write('@media (min-width: 992px) {')
+        self.out.write('@media (min-width: 768px) {')
         self.out.write('body{width: 70%;}')
         self.out.write('}')
-        self.out.write('@media (min-width: 1200px) {')
+        self.out.write('@media (min-width: 992px) {')
         self.out.write('body{width: 60%;}')
         self.out.write('}')
+        self.out.write('@media (min-width: 1200px) {')
+        self.out.write('body{width: 50%;}')
+        self.out.write('}')
+        self.out.write('*{margin: 0; padding: 0; box-sizing: border-box;}')
         self.out.write('html{height: 100%;}')
-        self.out.write('body{height: 100%; margin: 0 auto; padding: 0; font-family: sans-serif;}')
+        self.out.write('body{height: 100%; margin: 0 auto; font-family: sans-serif;}')
 
     def end_style(self):
         self.out.write('</style>')
