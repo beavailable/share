@@ -46,13 +46,19 @@ class BaseHandler(BaseHTTPRequestHandler):
             self.wfile.write(self.ico)
             return
         if not self.password or self._check_password():
-            self.do_get()
+            try:
+                self.do_get()
+            except:
+                self.respond_internal_server_error()
             return
         self.respond_ok(self._build_html_for_password())
 
     def do_POST(self):
         if not self.password or self._check_password():
-            self.do_post()
+            try:
+                self.do_post()
+            except:
+                self.respond_internal_server_error()
             return
         content_length = self.headers['Content-Length']
         if not content_length or not content_length.isdecimal():
@@ -322,7 +328,7 @@ class FileSendHandler(BaseHandler):
     def list_dir(self, path):
         dirs, files = [], []
         if self.dir:
-            path = self.dir + path
+            path = self.dir + path if self.dir != '/' else path
             for name in os.listdir(path):
                 abs_path = path + name
                 hidden = self.is_hidden(abs_path)
@@ -335,14 +341,20 @@ class FileSendHandler(BaseHandler):
                             pass
                         dirs.append((name, hidden, len(items)))
                     else:
-                        size = self.format_size(os.path.getsize(abs_path))
-                        files.append((name, hidden, size))
+                        size = 0
+                        try:
+                            size = os.path.getsize(abs_path)
+                        except:
+                            pass
+                        files.append((name, hidden, self.format_size(size)))
         else:
             for f in self.files:
+                size = 0
                 try:
-                    files.append((os.path.basename(f), False, self.format_size(os.path.getsize(f))))
+                    size = os.path.getsize(f)
                 except:
                     pass
+                files.append((os.path.basename(f), False, self.format_size(size)))
         dirs.sort(key=functools.cmp_to_key(lambda s1, s2: self.cmp_path(s1[0], s2[0])))
         files.sort(key=functools.cmp_to_key(lambda s1, s2: self.cmp_path(s1[0], s2[0])))
         return (dirs, files)
