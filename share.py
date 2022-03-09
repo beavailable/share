@@ -390,7 +390,7 @@ class FileSendHandler(BaseHandler):
         builder.append('a{color: #2965c7; text-decoration: none;}')
         builder.append('a.hidden{color: #42a5f5;}')
         builder.append('a:hover{color:#ff5500;}')
-        builder.append('button{padding: 2px 4px; cursor: pointer; border: 1px solid #cccccc; color: #333333; background-color: white; border-radius: 4px;}')
+        builder.append('button{padding: 1px 4px; cursor: pointer; border: 1px solid #cccccc; color: #333333; background-color: white; border-radius: 4px;}')
         builder.append('button:hover{background-color: #e6e6e6;}')
         builder.end_style()
         builder.start_script()
@@ -429,7 +429,7 @@ class FileSendHandler(BaseHandler):
         for d, hidden, items in dirs:
             builder.append('<li class="list-item">')
             builder.append(f'<a class="item-left{" hidden" if hidden else ""}" href="{html.escape(parse.quote(d))}/">')
-            builder.append('<svg class="item-icon" xmlns="http://www.w3.org/2000/svg" height="20" viewBox="0 0 24 24" width="20px" fill="#5f6368"><path d="M0 0h24v24H0z" fill="none"/><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>')
+            builder.append('<svg class="item-icon" xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 0 24 24" width="20px" fill="#5f6368"><path d="M0 0h24v24H0z" fill="none"/><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>')
             builder.append(f'{html.escape(d)}')
             builder.append('</a>')
             builder.append('<span class="item-right">')
