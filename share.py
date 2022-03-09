@@ -352,8 +352,10 @@ class FileSendHandler(BaseHandler):
                 size = 0
                 try:
                     size = os.path.getsize(f)
-                except:
+                except PermissionError:
                     pass
+                except FileNotFoundError:
+                    continue
                 files.append((os.path.basename(f), False, self.format_size(size)))
         dirs.sort(key=functools.cmp_to_key(lambda s1, s2: self.cmp_path(s1[0], s2[0])))
         files.sort(key=functools.cmp_to_key(lambda s1, s2: self.cmp_path(s1[0], s2[0])))
