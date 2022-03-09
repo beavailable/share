@@ -198,32 +198,30 @@ class BaseHandler(BaseHTTPRequestHandler):
 
 class FileSendHandler(BaseHandler):
 
-    def __init__(self, *args, dir=None, all=False, files=None, password=None):
-        self.dir = None
-        self.all = False
-        self.files = []
-        if dir:
-            self.dir = dir
-            self.all = all
-        elif files:
-            self.files = [os.path.realpath(f) for f in files if os.path.isfile(f)]
+    def __init__(self, *args, dir=None, all=None, files=None, password=None):
+        self.provider = WebFileProvider(dir, all, files)
         self.ua_prefixes = {'curl', 'Wget', 'wget2', 'aria2', 'Axel'}
         super().__init__(*args, password=password)
 
     def do_get(self):
         path, _ = self.split_path(parse.unquote(self.path))
-        if not self.can_respond(path):
+        if not self.provider.match(path):
             self.respond_not_found()
             return
-        if self.is_dir(path):
+        if self.provider.is_dir():
             if not path.endswith('/'):
                 self.respond_redirect(path + '/')
                 return
-            self.respond_for_dir(path)
-        elif self.is_file(path):
-            self.respond_for_file(path, self.is_from_commandline())
+            try:
+                dirs, files = self.provider.list_dir()
+            except PermissionError:
+                self.respond_forbidden()
+            except FileNotFoundError:
+                self.respond_not_found()
+            else:
+                self.respond_ok(self.build_html(path, dirs, files))
         else:
-            self.respond_not_found()
+            self.respond_for_file(self.provider.get_file(), self.is_from_commandline())
 
     def is_from_commandline(self):
         ua = self.headers['User-Agent']
@@ -245,47 +243,7 @@ class FileSendHandler(BaseHandler):
                         params[words[0]] = words[1]
         return (path, params)
 
-    def can_respond(self, path):
-        return not self.dir or self.all or path.find('/.') == -1
-
-    def is_dir(self, path):
-        if self.dir:
-            return os.path.isdir(self.dir + path)
-        return path == '/'
-
-    def is_file(self, path):
-        if self.dir:
-            return os.path.isfile(self.dir + path)
-        path = path[1:]
-        for f in self.files:
-            if path == os.path.basename(f):
-                return True
-        return path == 'file' and len(self.files) == 1
-
-    def get_file(self, path):
-        if self.dir:
-            return self.dir + path
-        path = path[1:]
-        for f in self.files:
-            if path == os.path.basename(f):
-                return f
-        if path == 'file' and len(self.files) == 1:
-            return self.files[0]
-        raise RuntimeError
-
-    def respond_for_dir(self, path):
-        try:
-            dirs, files = self.list_dir(path)
-        except PermissionError:
-            self.respond_forbidden()
-            return
-        except FileNotFoundError:
-            self.respond_not_found()
-            return
-        self.respond_ok(self.build_html(path, dirs, files))
-
-    def respond_for_file(self, path, include_content_disposition):
-        file = self.get_file(path)
+    def respond_for_file(self, file, include_content_disposition):
         try:
             f = open(file, 'rb')
         except PermissionError:
@@ -324,47 +282,6 @@ class FileSendHandler(BaseHandler):
                 self.send_content_disposition(filename)
             self.end_headers()
             self.copy_file_range(f, self.wfile, start, content_length)
-
-    def list_dir(self, path):
-        dirs, files = [], []
-        if self.dir:
-            path = self.dir + path if self.dir != '/' else path
-            for name in os.listdir(path):
-                abs_path = path + name
-                hidden = self.is_hidden(abs_path)
-                if self.all or not hidden:
-                    if os.path.isdir(abs_path):
-                        items = []
-                        try:
-                            items = [f for f in os.listdir(abs_path) if self.all or not self.is_hidden(f'{abs_path}/{f}')]
-                        except:
-                            pass
-                        dirs.append((name, hidden, len(items)))
-                    else:
-                        size = 0
-                        try:
-                            size = os.path.getsize(abs_path)
-                        except:
-                            pass
-                        files.append((name, hidden, self.format_size(size)))
-        else:
-            for f in self.files:
-                size = 0
-                try:
-                    size = os.path.getsize(f)
-                except PermissionError:
-                    pass
-                except FileNotFoundError:
-                    continue
-                files.append((os.path.basename(f), False, self.format_size(size)))
-        dirs.sort(key=functools.cmp_to_key(lambda s1, s2: self.cmp_path(s1[0], s2[0])))
-        files.sort(key=functools.cmp_to_key(lambda s1, s2: self.cmp_path(s1[0], s2[0])))
-        return (dirs, files)
-
-    def is_hidden(self, file):
-        if is_windows() and os.stat(file).st_file_attributes & stat.FILE_ATTRIBUTE_HIDDEN != 0:
-            return True
-        return os.path.basename(file).startswith('.')
 
     def build_html(self, path, dirs, files):
         path = path.rstrip('/')
@@ -494,54 +411,6 @@ class FileSendHandler(BaseHandler):
                 return
             dest.write(src.read(buf_size))
             length -= buf_size
-
-    def cmp_path(self, s1, s2):
-        if s1[0] == '.' and s2[0] != '.':
-            return -1
-        if s1[0] != '.' and s2[0] == '.':
-            return 1
-        len1, len2 = len(s1), len(s2)
-        i, min_len = 0, min(len1, len2)
-        while i < min_len:
-            ch1, ch2 = ord(s1[i]), ord(s2[i])
-            if 65 <= ch1 <= 90:
-                ch1 += 32
-            if 65 <= ch2 <= 90:
-                ch2 += 32
-            if ch1 == ch2:
-                i += 1
-            elif 48 <= ch1 <= 57 and 48 <= ch2 <= 57:
-                num1, idx1 = self.check_number(s1, len1, i)
-                num2, idx2 = self.check_number(s2, len2, i)
-                if num1 != num2:
-                    return num1 - num2
-                i = idx1
-            else:
-                return ch1 - ch2
-        return len1 - len2
-
-    def check_number(self, s, n, start):
-        num, end = 0, start
-        while end < n:
-            ch = ord(s[end])
-            if ch < 48 or ch > 57:
-                break
-            num = num * 10 + ch - 48
-            end += 1
-        return (num, end)
-
-    def format_size(self, size):
-        lst = ((1024, 'KiB'), (1048576, 'MiB'), (1073741824, 'GiB'), (1099511627776, 'TiB'))
-        idx = 0
-        if size < 1048576:
-            idx = 0
-        elif size < 1073741824:
-            idx = 1
-        elif size < 1099511627776:
-            idx = 2
-        else:
-            idx = 3
-        return f'{size/lst[idx][0]:.2f} {lst[idx][1]}'
 
 
 class FileReceiveHandler(BaseHandler):
@@ -813,6 +682,139 @@ class HtmlBuilder:
         self.out.close()
 
 
+class WebFileProvider:
+
+    def __init__(self, dir=None, all=False, files=None):
+        self._dir = dir
+        self._all = all
+        self._files = files
+
+    def match(self, path):
+        if self._dir:
+            self._file_path = path if self._dir == '/' else self._dir + path
+            if not self._all:
+                if self._is_hidden(self._file_path) or path.find('/.') != -1:
+                    return False
+            if os.path.isdir(self._file_path):
+                self._is_dir = True
+                return True
+            elif os.path.isfile(self._file_path):
+                self._is_dir = False
+                return True
+            else:
+                return False
+        elif path == '/':
+            self._is_dir = True
+            return True
+        else:
+            path = path[1:]
+            for f in self._files:
+                if path == os.path.basename(f):
+                    self._is_dir = False
+                    self._file_path = f
+                    return True
+            if path == 'file' and len(self._files) == 1:
+                self._is_dir = False
+                self._file_path = self._files[0]
+                return True
+            else:
+                return False
+
+    def is_dir(self):
+        return self._is_dir
+
+    def get_file(self):
+        return self._file_path
+
+    def list_dir(self):
+        dirs, files = [], []
+        if self._dir:
+            for name in os.listdir(self._file_path):
+                path = self._file_path + name
+                hidden = self._is_hidden(path)
+                if self._all or not hidden:
+                    if os.path.isdir(path):
+                        items = []
+                        try:
+                            items = [f for f in os.listdir(path) if self._all or not self._is_hidden(f'{path}/{f}')]
+                        except:
+                            pass
+                        dirs.append((name, hidden, len(items)))
+                    else:
+                        size = 0
+                        try:
+                            size = os.path.getsize(path)
+                        except:
+                            pass
+                        files.append((name, hidden, self._format_size(size)))
+        else:
+            for f in self._files:
+                size = 0
+                try:
+                    size = os.path.getsize(f)
+                except PermissionError:
+                    pass
+                except FileNotFoundError:
+                    continue
+                files.append((os.path.basename(f), self._is_hidden(f), self._format_size(size)))
+        dirs.sort(key=functools.cmp_to_key(lambda s1, s2: self._cmp_path(s1[0], s2[0])))
+        files.sort(key=functools.cmp_to_key(lambda s1, s2: self._cmp_path(s1[0], s2[0])))
+        return (dirs, files)
+
+    def _is_hidden(self, path):
+        if is_windows() and os.stat(path).st_file_attributes & stat.FILE_ATTRIBUTE_HIDDEN != 0:
+            return True
+        return os.path.basename(path).startswith('.')
+
+    def _cmp_path(self, s1, s2):
+        if s1[0] == '.' and s2[0] != '.':
+            return -1
+        if s1[0] != '.' and s2[0] == '.':
+            return 1
+        len1, len2 = len(s1), len(s2)
+        i, min_len = 0, min(len1, len2)
+        while i < min_len:
+            ch1, ch2 = ord(s1[i]), ord(s2[i])
+            if 65 <= ch1 <= 90:
+                ch1 += 32
+            if 65 <= ch2 <= 90:
+                ch2 += 32
+            if ch1 == ch2:
+                i += 1
+            elif 48 <= ch1 <= 57 and 48 <= ch2 <= 57:
+                num1, idx1 = self._check_number(s1, len1, i)
+                num2, idx2 = self._check_number(s2, len2, i)
+                if num1 != num2:
+                    return num1 - num2
+                i = idx1
+            else:
+                return ch1 - ch2
+        return len1 - len2
+
+    def _check_number(self, s, n, start):
+        num, end = 0, start
+        while end < n:
+            ch = ord(s[end])
+            if ch < 48 or ch > 57:
+                break
+            num = num * 10 + ch - 48
+            end += 1
+        return (num, end)
+
+    def _format_size(self, size):
+        lst = ((1024, 'KiB'), (1048576, 'MiB'), (1073741824, 'GiB'), (1099511627776, 'TiB'))
+        idx = 0
+        if size < 1048576:
+            idx = 0
+        elif size < 1073741824:
+            idx = 1
+        elif size < 1099511627776:
+            idx = 2
+        else:
+            idx = 3
+        return f'{size/lst[idx][0]:.2f} {lst[idx][1]}'
+
+
 class MultipartParser:
 
     def __init__(self, stream, boundary, content_length):
@@ -982,10 +984,11 @@ def main():
                 dir = os.getcwd()
             elif os.path.isdir(args.arguments[0]):
                 dir = args.arguments[0]
-            elif os.path.isfile(args.arguments[0]):
-                files = args.arguments
             else:
-                raise FileNotFoundError(f'{args.arguments[0]} is not a file or directory')
+                for f in args.arguments:
+                    if not os.path.isfile(f):
+                        raise FileNotFoundError(f'{f} is not a file')
+                files = [os.path.realpath(f) for f in args.arguments]
             if dir:
                 handler_class = functools.partial(FileSendHandler, dir=dir, all=args.all, password=args.password)
             else:
