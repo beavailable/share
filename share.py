@@ -686,16 +686,24 @@ class HtmlBuilder:
 class WebFileProvider:
 
     def __init__(self, dir=None, all=False, files=None):
-        self._dir = dir
+        if dir:
+            self._dir = dir.rstrip('/\\') + '/'
+        else:
+            self._dir = None
         self._all = all
         self._files = files
+        if is_windows():
+            self._is_hidden = self._is_hidden_windows
+            self._contains_hidden_segment = self._contains_hidden_segment_windows
+        else:
+            self._is_hidden = self._is_hidden_unix
+            self._contains_hidden_segment = self._contains_hidden_segment_unix
 
     def match(self, path):
         if self._dir:
-            self._file_path = path if self._dir == '/' else self._dir + path
-            if not self._all:
-                if self._is_hidden(self._file_path) or path.find('/.') != -1:
-                    return False
+            if not self._all and self._contains_hidden_segment(path):
+                return False
+            self._file_path = self._dir.rstrip('/') + path
             if os.path.isdir(self._file_path):
                 self._is_dir = True
                 return True
@@ -762,10 +770,22 @@ class WebFileProvider:
         files.sort(key=functools.cmp_to_key(lambda s1, s2: self._cmp_path(s1[0], s2[0])))
         return (dirs, files)
 
-    def _is_hidden(self, path):
-        if is_windows() and os.stat(path).st_file_attributes & stat.FILE_ATTRIBUTE_HIDDEN != 0:
-            return True
-        return os.path.basename(path).startswith('.')
+    def _contains_hidden_segment_windows(self, path):
+        prefix = self._dir
+        for segment in path.strip('/').split('/'):
+            if self._is_hidden(prefix + segment):
+                return True
+            prefix = prefix + segment + '/'
+        return False
+
+    def _contains_hidden_segment_unix(self, path):
+        return path.find('/.') != -1
+
+    def _is_hidden_windows(self, file_path):
+        return self._is_hidden_unix(file_path) or os.stat(file_path).st_file_attributes & stat.FILE_ATTRIBUTE_HIDDEN != 0
+
+    def _is_hidden_unix(self, file_path):
+        return os.path.basename(file_path).startswith('.')
 
     def _cmp_path(self, s1, s2):
         if s1[0] == '.' and s2[0] != '.':
