@@ -196,7 +196,7 @@ class BaseHandler(BaseHTTPRequestHandler):
         sys.stderr.write('%s - %s - %s\n' % (t, self.address_string(), format % args))
 
 
-class FileSendHandler(BaseHandler):
+class FileShareHandler(BaseHandler):
 
     def __init__(self, *args, dir=None, all=None, files=None, password=None):
         self.provider = WebFileProvider(dir, all, files)
@@ -508,7 +508,7 @@ class FileReceiveHandler(BaseHandler):
         return value
 
 
-class TextSendHandler(BaseHandler):
+class TextShareHandler(BaseHandler):
 
     def __init__(self, text, *args, password=None):
         self.text = text
@@ -988,7 +988,7 @@ def main():
                 text = ''.join(sys.stdin.readlines())
                 if not text:
                     sys.exit(1)
-            handler_class = functools.partial(TextSendHandler, text, password=args.password)
+            handler_class = functools.partial(TextShareHandler, text, password=args.password)
     else:
         if args.receive:
             dir = None
@@ -1011,9 +1011,9 @@ def main():
                         raise FileNotFoundError(f'{f} is not a file')
                 files = [os.path.realpath(f) for f in args.arguments]
             if dir:
-                handler_class = functools.partial(FileSendHandler, dir=dir, all=args.all, password=args.password)
+                handler_class = functools.partial(FileShareHandler, dir=dir, all=args.all, password=args.password)
             else:
-                handler_class = functools.partial(FileSendHandler, files=files, password=args.password)
+                handler_class = functools.partial(FileShareHandler, files=files, password=args.password)
     ShareServer.address_family, addr = get_best_family(args.address, args.port)
     with ShareServer(addr, handler_class) as server:
         host, port = server.socket.getsockname()[:2]
