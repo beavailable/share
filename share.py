@@ -46,19 +46,13 @@ class BaseHandler(BaseHTTPRequestHandler):
             self.wfile.write(self.ico)
             return
         if not self.password or self._check_password():
-            try:
-                self.do_get()
-            except:
-                self.respond_internal_server_error()
+            self.do_get()
             return
         self.respond_ok(self._build_html_for_password())
 
     def do_POST(self):
         if not self.password or self._check_password():
-            try:
-                self.do_post()
-            except:
-                self.respond_internal_server_error()
+            self.do_post()
             return
         content_length = self.headers['Content-Length']
         if not content_length or not content_length.isdecimal():
