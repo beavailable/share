@@ -23,7 +23,7 @@ class ShareServer(ThreadingHTTPServer):
     def handle_error(self, request, client_address):
         year, month, day, hh, mm, ss, x, y, z = time.localtime()
         t, value, traceback = sys.exc_info()
-        sys.stderr.write(f'\033[93m{year:04}/{month:02}/{day:02} {hh:02}:{mm:02}:{ss:02} - {client_address[0]}:{client_address[1]} - {t.__name__}: {value}\033[0m\n')
+        sys.stderr.write(f'\033[33m{year:04}/{month:02}/{day:02} {hh:02}:{mm:02}:{ss:02} - {client_address[0]}:{client_address[1]} - {t.__name__}: {value}\033[0m\n')
 
 
 class BaseHandler(BaseHTTPRequestHandler):
