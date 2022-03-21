@@ -353,8 +353,11 @@ class BaseFileShareHandler(BaseHandler):
         builder.append('a{color: #2965c7; text-decoration: none;}')
         builder.append('a.hidden{color: #42a5f5;}')
         builder.append('a:hover{color:#ff5500;}')
+        if self._upload:
+            builder.append('.upload{background-color: #76797b; border-color: #76797b; color: white; border-radius: 16px;}')
+            builder.append('.upload:hover, .dragging{background-color: #565e64; border-color: #565e64;}')
         builder.append('button{cursor: pointer; border: 1px solid #cccccc; color: #333333; background-color: white; border-radius: 4px;}')
-        builder.append('button:hover, .dragging{background-color: #e6e6e6;}')
+        builder.append('button:hover{background-color: #e6e6e6;}')
         builder.append('button:disabled{opacity: .65; pointer-events: none; user-select: none;}')
         builder.append('.btn-view{padding: 1px 4px;}')
         builder.end_style()
