@@ -180,7 +180,7 @@ class BaseHandler(BaseHTTPRequestHandler):
         self.send_header('Content-Type', content_type)
 
     def send_location(self, location):
-        self.send_header('Location', parse.quote(location))
+        self.send_header('Location', location)
 
     def send_accept_ranges(self):
         self.send_header('Accept-Ranges', 'bytes')
@@ -427,7 +427,7 @@ class BaseFileShareHandler(BaseHandler):
         builder.append('</div>')
         if self._upload:
             builder.append('<button id="upload" class="upload">Upload</button>')
-            builder.append(f'<form id="form" action="{path}" method="post" enctype="multipart/form-data" style="display: none;">')
+            builder.append(f'<form id="form" action="{html.escape(parse.quote(path))}" method="post" enctype="multipart/form-data" style="display: none;">')
             builder.append('<input id="file" name="file" type="file" required multiple>')
             builder.append('</form>')
         builder.append('</div>')
