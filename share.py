@@ -87,6 +87,45 @@ class BaseHandler(BaseHTTPRequestHandler):
     def do_post(self):
         self.respond_method_not_allowed()
 
+    def do_multipart(self, save_dir, redirect_location):
+        content_length = self.headers['Content-Length']
+        if not content_length or not content_length.isdecimal():
+            self.respond_bad_request()
+            return
+        content_length = int(content_length)
+        if not self._has_freespace(content_length):
+            self.respond_internal_server_error()
+            return
+        content_type = self.headers['Content-Type']
+        if not content_type:
+            self.respond_bad_request()
+            return
+        boundary = self._parse_boundary(content_type)
+        if not boundary:
+            self.respond_bad_request()
+            return
+        try:
+            parser = MultipartParser(self.rfile, boundary, content_length)
+            while parser.has_next():
+                name = parser.next_name()
+                if name != 'file':
+                    self.respond_bad_request()
+                    return
+                filename = parser.next_filename()
+                if not filename:
+                    self.respond_bad_request()
+                    return
+                save_dir = save_dir.rstrip('/\\')
+                os.makedirs(save_dir, exist_ok=True)
+                with open(f'{save_dir}/{filename}', 'wb') as f:
+                    parser.write_next_to(f)
+        except MultipartError:
+            self.respond_bad_request()
+        except PermissionError:
+            self.respond_forbidden()
+        else:
+            self.respond_redirect(redirect_location)
+
     def _validate_password(self):
         cookie = cookies.SimpleCookie(self.headers['Cookie'])
         password = cookie.get('password')
@@ -111,6 +150,28 @@ class BaseHandler(BaseHTTPRequestHandler):
         builder.append('</div>')
         builder.end_body()
         return builder.build()
+
+    def _has_freespace(self, need_size):
+        path = self._dir
+        if is_windows():
+            path, _ = os.path.splitdrive(path)
+        total, used, free = shutil.disk_usage(path)
+        return free - need_size >= 1073741824
+
+    def _parse_boundary(self, content_type):
+        parts = content_type.split('; ')
+        if len(parts) != 2:
+            return None
+        form_data, boundary = parts
+        if form_data != 'multipart/form-data':
+            return None
+        parts = boundary.split('=')
+        if len(parts) != 2:
+            return None
+        key, value = parts
+        if key != 'boundary':
+            return None
+        return value
 
     def send_content_length(self, content_length):
         self.send_header('Content-Length', str(content_length))
@@ -204,13 +265,14 @@ class BaseHandler(BaseHTTPRequestHandler):
 
 class BaseFileShareHandler(BaseHandler):
 
-    def __init__(self, *args, password=None):
+    def __init__(self, *args, upload=False, **kwargs):
+        self._upload = upload
         self._ua_prefixes = {'curl', 'Wget', 'wget2', 'aria2', 'Axel'}
         if is_windows():
             self.is_hidden = self._is_hidden_windows
         else:
             self.is_hidden = self._is_hidden_unix
-        super().__init__(*args, password=password)
+        super().__init__(*args, **kwargs)
 
     def split_path(self, path):
         parts = path.split('?', 1)
@@ -267,11 +329,10 @@ class BaseFileShareHandler(BaseHandler):
             self._copy_file_range(f, self.wfile, start, content_length)
 
     def build_html(self, path, dirs, files):
-        path = path.rstrip('/')
-        if not path:
+        if path == '/':
             title = self._hostname
         else:
-            title = os.path.basename(path)
+            title = os.path.basename(path.rstrip('/'))
         builder = HtmlBuilder()
         builder.start_head()
         builder.start_title()
@@ -279,7 +340,7 @@ class BaseFileShareHandler(BaseHandler):
         builder.end_title()
         builder.start_style()
         builder.append('.container{height: 100%; display: flex; flex-direction: column; padding: 0 8px; overflow-wrap: break-word;}')
-        builder.append('.header{padding: 8px 0; font-size: x-large;}')
+        builder.append('.header{display: flex; justify-content: space-between; padding: 8px 0; font-size: x-large;}')
         builder.append('hr{width: 100%;}')
         builder.append('.main{flex: auto; display: flex; flex-direction: column; padding: 16px 0;}')
         builder.append('.list-item{display: flex; justify-content: space-between; padding: 2px 0; word-break: break-all;}')
@@ -292,13 +353,17 @@ class BaseFileShareHandler(BaseHandler):
         builder.append('a{color: #2965c7; text-decoration: none;}')
         builder.append('a.hidden{color: #42a5f5;}')
         builder.append('a:hover{color:#ff5500;}')
-        builder.append('button{padding: 1px 4px; cursor: pointer; border: 1px solid #cccccc; color: #333333; background-color: white; border-radius: 4px;}')
-        builder.append('button:hover{background-color: #e6e6e6;}')
+        builder.append('button{cursor: pointer; border: 1px solid #cccccc; color: #333333; background-color: white; border-radius: 4px;}')
+        builder.append('button:hover, .dragging{background-color: #e6e6e6;}')
+        builder.append('button:disabled{opacity: .65; pointer-events: none; user-select: none;}')
+        builder.append('.btn-view{padding: 1px 4px;}')
+        if self._upload:
+            builder.append('.upload{padding: 1px 6px;}')
         builder.end_style()
         builder.start_script()
         builder.append('function view_file(){')
         builder.append('src = this.getAttribute("src");')
-        builder.append('var frame = document.createElement("iframe");')
+        builder.append('let frame = document.createElement("iframe");')
         builder.append('frame.setAttribute("src",src);')
         builder.append('frame.setAttribute("allow","fullscreen");')
         builder.append('frame.setAttribute("width","100%");')
@@ -307,23 +372,66 @@ class BaseFileShareHandler(BaseHandler):
         builder.append('content.replaceWith(frame);')
         builder.append('document.title=src;')
         builder.append('}')
-        builder.append('window.onload = function() {')
-        builder.append('btns = document.getElementsByClassName("btn_view");')
-        builder.append('for (var i = 0; i < btns.length; i++) {')
+        if self._upload:
+            builder.append('function on_upload_click(){')
+            builder.append('document.getElementById("file").click();')
+            builder.append('}')
+            builder.append('function on_upload(){')
+            builder.append('document.getElementById("upload").setAttribute("disabled", "");')
+            builder.append('document.getElementById("form").submit();')
+            builder.append('}')
+            builder.append('function on_dragenter(e){')
+            builder.append('e.preventDefault();')
+            builder.append('e.currentTarget.classList.add("dragging");')
+            builder.append('}')
+            builder.append('function on_dragover(e){')
+            builder.append('e.preventDefault();')
+            builder.append('}')
+            builder.append('function on_dragleave(e){')
+            builder.append('e.preventDefault();')
+            builder.append('e.currentTarget.classList.remove("dragging");')
+            builder.append('}')
+            builder.append('function on_drop(e){')
+            builder.append('e.preventDefault();')
+            builder.append('e.currentTarget.classList.remove("dragging");')
+            builder.append('document.getElementById("file").files = e.dataTransfer.files;')
+            builder.append('document.getElementById("upload").setAttribute("disabled", "");')
+            builder.append('document.getElementById("form").submit();')
+            builder.append('}')
+        builder.append('function on_load() {')
+        builder.append('let btns = document.getElementsByClassName("btn-view");')
+        builder.append('for (let i = 0; i < btns.length; i++) {')
         builder.append('btns[i].onclick = view_file;')
         builder.append('}')
+        if self._upload:
+            builder.append('let upload = document.getElementById("upload");')
+            builder.append('upload.onclick = on_upload_click;')
+            builder.append('upload.ondragenter = on_dragenter;')
+            builder.append('upload.ondragover = on_dragover;')
+            builder.append('upload.ondragleave = on_dragleave;')
+            builder.append('upload.ondrop = on_drop;')
+            builder.append('let file = document.getElementById("file");')
+            builder.append('file.onchange = on_upload;')
         builder.append('}')
+        builder.append('window.onload = on_load;')
         builder.end_script()
         builder.end_head()
         builder.start_body()
         builder.append('<div class="container">')
         builder.append('<div class="header">')
+        builder.append('<div>')
         builder.append(f'<a href="/">{html.escape(self._hostname)}</a>')
         p = ''
         for name in path.split('/'):
             if name:
                 p = f'{p}/{name}'
                 builder.append(f'&nbsp;/&nbsp;<a href="{html.escape(parse.quote(p))}/">{html.escape(name)}</a>')
+        builder.append('</div>')
+        if self._upload:
+            builder.append('<button id="upload" class="upload">Upload</button>')
+            builder.append(f'<form id="form" action="{path}" method="post" enctype="multipart/form-data" style="display: none;">')
+            builder.append('<input id="file" name="file" type="file" required multiple>')
+            builder.append('</form>')
         builder.append('</div>')
         builder.append('<hr>')
         builder.append('<div class="main">')
@@ -345,7 +453,7 @@ class BaseFileShareHandler(BaseHandler):
             builder.append(f'{html.escape(f)}')
             builder.append('</a>')
             builder.append('<span class="item-right">')
-            builder.append(f'<span class="size">{self._format_size(size)}</span>&nbsp;<button class="btn_view" src="{html.escape(parse.quote(f))}">View</button>')
+            builder.append(f'<span class="size">{self._format_size(size)}</span>&nbsp;<button class="btn-view" src="{html.escape(parse.quote(f))}">View</button>')
             builder.append('</span>')
             builder.append('</li>')
         builder.append('</ul>')
@@ -456,9 +564,9 @@ class BaseFileShareHandler(BaseHandler):
 
 class FileShareHandler(BaseFileShareHandler):
 
-    def __init__(self, files, *args, password=None):
+    def __init__(self, files, *args, **kwargs):
         self._files = files
-        super().__init__(*args, password=password)
+        super().__init__(*args, **kwargs)
 
     def do_get(self):
         path, _ = self.split_path(parse.unquote(self.path))
@@ -489,17 +597,14 @@ class FileShareHandler(BaseFileShareHandler):
 
 class DirectoryShareHandler(BaseFileShareHandler):
 
-    def __init__(self, dir, all, *args, password=None):
-        if dir:
-            self._dir = dir.rstrip('/\\') + '/'
-        else:
-            self._dir = None
+    def __init__(self, dir, all, *args, **kwargs):
+        self._dir = dir.rstrip('/\\') + '/'
         self._all = all
         if is_windows():
             self._contains_hidden_segment = self._contains_hidden_segment_windows
         else:
             self._contains_hidden_segment = self._contains_hidden_segment_unix
-        super().__init__(*args, password=password)
+        super().__init__(*args, **kwargs)
 
     def do_get(self):
         path, _ = self.split_path(parse.unquote(self.path))
@@ -522,6 +627,12 @@ class DirectoryShareHandler(BaseFileShareHandler):
             self.respond_for_file(file_path)
         else:
             self.respond_not_found()
+
+    def do_post(self):
+        if self._upload:
+            self.do_multipart(self._dir.rstrip('/') + parse.unquote(self.path), self.path)
+        else:
+            super().do_post()
 
     def list_dir(self, dir):
         dirs, files = [], []
@@ -559,9 +670,9 @@ class DirectoryShareHandler(BaseFileShareHandler):
 
 class FileReceiveHandler(BaseHandler):
 
-    def __init__(self, dir, *args, password=None):
-        self._dir = dir.rstrip('/\\') + '/'
-        super().__init__(*args, password=password)
+    def __init__(self, dir, *args, **kwargs):
+        self._dir = dir
+        super().__init__(*args, **kwargs)
 
     def do_get(self):
         if self.path != '/':
@@ -594,70 +705,14 @@ class FileReceiveHandler(BaseHandler):
         if self.path != '/':
             self.respond_bad_request()
             return
-        content_length = self.headers['Content-Length']
-        if not content_length or not content_length.isdecimal():
-            self.respond_bad_request()
-            return
-        content_length = int(content_length)
-        if not self.has_freespace(content_length):
-            self.respond_internal_server_error()
-            return
-        content_type = self.headers['Content-Type']
-        if not content_type:
-            self.respond_bad_request()
-            return
-        boundary = self.parse_boundary(content_type)
-        if not boundary:
-            self.respond_bad_request()
-            return
-        try:
-            parser = MultipartParser(self.rfile, boundary, content_length)
-            while parser.has_next():
-                name = parser.next_name()
-                if name != 'file':
-                    self.respond_bad_request()
-                    return
-                filename = parser.next_filename()
-                if not filename:
-                    self.respond_bad_request()
-                    return
-                with open(f'{self._dir}{filename}', 'wb') as f:
-                    parser.write_next_to(f)
-        except MultipartError:
-            self.respond_bad_request()
-        except PermissionError:
-            self.respond_forbidden()
-        else:
-            self.respond_redirect('/')
-
-    def has_freespace(self, need_size):
-        path = self._dir
-        if is_windows():
-            path, _ = os.path.splitdrive(path)
-        total, used, free = shutil.disk_usage(path)
-        return free - need_size >= 1073741824
-
-    def parse_boundary(self, content_type):
-        parts = content_type.split('; ')
-        if len(parts) != 2:
-            return None
-        form_data, boundary = parts
-        if form_data != 'multipart/form-data':
-            return None
-        parts = boundary.split('=')
-        if len(parts) != 2:
-            return None
-        key, value = parts
-        if key != 'boundary':
-            return None
-        return value
+        self.do_multipart(self._dir, '/')
 
 
 class TextShareHandler(BaseHandler):
 
-    def __init__(self, text, *args, password=None):
+    def __init__(self, text, *args, **kwargs):
         self._text = text
-        super().__init__(*args, password=password)
+        super().__init__(*args, **kwargs)
 
     def do_get(self):
         if self.path != '/':
@@ -952,24 +1007,42 @@ def print_prompt():
         sys.stderr.write('Enter your text, then press Ctrl + D:\n')
 
 
+def start_server(address, port, handler_class):
+    ShareServer.address_family, addr = get_best_family(address, port)
+    with ShareServer(addr, handler_class) as server:
+        host, port = server.socket.getsockname()[:2]
+        sys.stderr.write(f'Serving HTTP on {host} port {port} ...\n')
+        server.serve_forever()
+
+
 def main():
     sys.tracebacklimit = 0
     signal.signal(signal.SIGINT, on_interrupt)
     parser = argparse.ArgumentParser(allow_abbrev=False)
     parser.add_argument('-b', '--bind', dest='address', help='bind address [default: all interfaces]')
     parser.add_argument('-p', '--port', type=int, default=8888, help='port [default: 8888]')
-    parser.add_argument('-a', '--all', action='store_true', help='show all files, including hidden ones')
-    parser.add_argument('-t', '--text', action='store_true', help='text mode')
-    parser.add_argument('-r', '--receive', action='store_true', help='receive mode')
+    parser.add_argument('-s', '--share', action='store_true', help='share mode (default mode)')
+    parser.add_argument('-r', '--receive', action='store_true', help='receive mode, can be used with -s option (only for directory)')
+    parser.add_argument('-a', '--all', action='store_true', help='show all files, including hidden ones, only for directory')
+    parser.add_argument('-t', '--text', action='store_true', help='for text')
     parser.add_argument('-P', '--password', nargs='?', const=os.getenv('SHARE_PASSWORD'), help='access password, if no PASSWORD is specified, the environment variable SHARE_PASSWORD will be used')
     parser.add_argument('arguments', nargs='*', help='a directory, files or texts')
     args = parser.parse_args()
     if args.password and len(args.password) < 3:
         raise ValueError('password is too short')
-    if args.text:
-        if args.receive:
-            handler_class = functools.partial(TextReceiveHandler, password=args.password)
+    if not args.receive:
+        args.share = True
+    if args.share and args.receive:
+        dir = None
+        if not args.arguments:
+            dir = os.getcwd()
+        elif os.path.isdir(args.arguments[0]):
+            dir = args.arguments[0]
         else:
+            raise FileNotFoundError(f'{args.arguments[0]} is not a directory')
+        handler_class = functools.partial(DirectoryShareHandler, dir, args.all, upload=True, password=args.password)
+    elif args.share:
+        if args.text:
             if args.arguments:
                 text = '\n'.join(args.arguments)
             else:
@@ -978,16 +1051,6 @@ def main():
                 if not text:
                     sys.exit(1)
             handler_class = functools.partial(TextShareHandler, text, password=args.password)
-    else:
-        if args.receive:
-            dir = None
-            if not args.arguments:
-                dir = os.getcwd()
-            elif os.path.isdir(args.arguments[0]):
-                dir = args.arguments[0]
-            else:
-                raise FileNotFoundError(f'{args.arguments[0]} is not a directory')
-            handler_class = functools.partial(FileReceiveHandler, dir, password=args.password)
         else:
             dir, files = None, None
             if not args.arguments:
@@ -1003,11 +1066,19 @@ def main():
                 handler_class = functools.partial(DirectoryShareHandler, dir, args.all, password=args.password)
             else:
                 handler_class = functools.partial(FileShareHandler, files, password=args.password)
-    ShareServer.address_family, addr = get_best_family(args.address, args.port)
-    with ShareServer(addr, handler_class) as server:
-        host, port = server.socket.getsockname()[:2]
-        sys.stderr.write(f'Serving HTTP on {host} port {port} ...\n')
-        server.serve_forever()
+    else:
+        if args.text:
+            handler_class = functools.partial(TextReceiveHandler, password=args.password)
+        else:
+            dir = None
+            if not args.arguments:
+                dir = os.getcwd()
+            elif os.path.isdir(args.arguments[0]):
+                dir = args.arguments[0]
+            else:
+                raise FileNotFoundError(f'{args.arguments[0]} is not a directory')
+            handler_class = functools.partial(FileReceiveHandler, dir, password=args.password)
+    start_server(args.address, args.port, handler_class)
 
 
 main()
