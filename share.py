@@ -115,8 +115,8 @@ class BaseHandler(BaseHTTPRequestHandler):
                 if not filename:
                     self.respond_bad_request()
                     return
-                save_dir = save_dir.rstrip('/\\')
                 os.makedirs(save_dir, exist_ok=True)
+                save_dir = save_dir.rstrip('/\\')
                 with open(f'{save_dir}/{filename}', 'wb') as f:
                     parser.write_next_to(f)
         except MultipartError:
