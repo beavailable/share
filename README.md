@@ -11,7 +11,7 @@
 
 # 用法
 ```
-usage: share.py [-h] [-b ADDRESS] [-p PORT] [-a] [-t] [-r] [-P [PASSWORD]] [arguments ...]
+usage: share.py [-h] [-b ADDRESS] [-p PORT] [-s] [-r] [-a] [-t] [-P [PASSWORD]] [arguments ...]
 
 positional arguments:
   arguments             a directory, files or texts
@@ -21,9 +21,10 @@ optional arguments:
   -b ADDRESS, --bind ADDRESS
                         bind address [default: all interfaces]
   -p PORT, --port PORT  port [default: 8888]
-  -a, --all             show all files, including hidden ones
-  -t, --text            text mode
-  -r, --receive         receive mode
+  -s, --share           share mode (default mode)
+  -r, --receive         receive mode, can be used with -s option (only for directory)
+  -a, --all             show all files, including hidden ones, only for directory
+  -t, --text            for text
   -P [PASSWORD], --password [PASSWORD]
                         access password, if no PASSWORD is specified, the environment
                         variable SHARE_PASSWORD will be used
