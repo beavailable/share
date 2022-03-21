@@ -395,6 +395,7 @@ class BaseFileShareHandler(BaseHandler):
             builder.append('function on_drop(e){')
             builder.append('    e.preventDefault();')
             builder.append('    e.currentTarget.classList.remove("dragging");')
+            builder.append('    if (e.dataTransfer.files.length == 0) {return;}')
             builder.append('    document.getElementById("file").files = e.dataTransfer.files;')
             builder.append('    document.getElementById("upload").setAttribute("disabled", "");')
             builder.append('    document.getElementById("form").submit();')
