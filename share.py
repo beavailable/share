@@ -474,7 +474,11 @@ class BaseFileShareHandler(BaseHandler):
         builder.end_body()
         return builder.build()
 
-    def cmp_path(self, s1, s2):
+    def cmp_file(self, e1, e2):
+        s1, hidden1, _ = e1
+        s2, hidden2, _ = e2
+        if hidden1 != hidden2:
+            return hidden2 - hidden1
         if s1[0] == '.' and s2[0] != '.':
             return -1
         if s1[0] != '.' and s2[0] == '.':
@@ -593,7 +597,7 @@ class FileShareHandler(BaseFileShareHandler):
                 except FileNotFoundError:
                     continue
                 files.append((os.path.basename(f), self.is_hidden(f), size))
-            files.sort(key=functools.cmp_to_key(lambda s1, s2: self.cmp_path(s1[0], s2[0])))
+            files.sort(key=functools.cmp_to_key(self.cmp_file))
             self.respond_ok(self.build_html(path, [], files))
             return
         path = path[1:]
@@ -627,8 +631,8 @@ class DirectoryShareHandler(BaseFileShareHandler):
         if os.path.isdir(file_path):
             try:
                 dirs, files = self.list_dir(file_path)
-                dirs.sort(key=functools.cmp_to_key(lambda s1, s2: self.cmp_path(s1[0], s2[0])))
-                files.sort(key=functools.cmp_to_key(lambda s1, s2: self.cmp_path(s1[0], s2[0])))
+                dirs.sort(key=functools.cmp_to_key(self.cmp_file))
+                files.sort(key=functools.cmp_to_key(self.cmp_file))
             except PermissionError:
                 self.respond_forbidden()
             except FileNotFoundError:
