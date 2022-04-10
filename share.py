@@ -629,6 +629,9 @@ class DirectoryShareHandler(BaseFileShareHandler):
             return
         file_path = self._dir.rstrip('/') + path
         if os.path.isdir(file_path):
+            if not path.endswith('/'):
+                self.respond_redirect(path + '/')
+                return
             try:
                 dirs, files = self.list_dir(file_path)
                 dirs.sort(key=functools.cmp_to_key(self.cmp_file))
