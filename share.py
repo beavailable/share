@@ -466,7 +466,7 @@ class BaseFileShareHandler(BaseHandler):
             builder.append('<span class="item-right">')
             builder.append(f'<span class="size">{self._format_size(size)}</span>')
             builder.append(f'<a class="btn-download" href="{html.escape(parse.quote(f))}" download>')
-            builder.append('<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="#2965c7"><path d="M0 0h24v24H0z" fill="none"/><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>')
+            builder.append('<svg xmlns="http://www.w3.org/2000/svg" enable-background="new 0 0 24 24" height="24px" viewBox="0 0 24 24" width="24px" fill="#2965c7"><g><rect fill="none" height="24" width="24"/></g><g><path d="M18,15v3H6v-3H4v3c0,1.1,0.9,2,2,2h12c1.1,0,2-0.9,2-2v-3H18z M17,11l-1.41-1.41L13,12.17V4h-2v8.17L8.41,9.59L7,11l5,5 L17,11z"/></g></svg>')
             builder.append('</a>')
             builder.append('</span>')
             builder.append('</li>')
