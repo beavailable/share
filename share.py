@@ -666,14 +666,14 @@ class DirectoryShareHandler(BaseFileShareHandler):
                     items = []
                     try:
                         items = [f for f in os.listdir(path) if self._all or not self.is_hidden(f'{path}/{f}')]
-                    except:
+                    except Exception:
                         pass
                     dirs.append((name, hidden, len(items)))
                 else:
                     size = 0
                     try:
                         size = os.path.getsize(path)
-                    except:
+                    except Exception:
                         pass
                     files.append((name, hidden, size))
         return (dirs, files)
