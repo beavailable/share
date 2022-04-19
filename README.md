@@ -11,13 +11,12 @@
 
 # 用法
 ```
-usage: share.py [-h] [-b ADDRESS] [-p PORT] [-s] [-r] [-a] [-t] [-P [PASSWORD]] [arguments ...]
+usage: share.py [-b ADDRESS] [-p PORT] [-s] [-r] [-a] [-t] [-P [PASSWORD]] [-h] [--certfile CERTFILE] [--keyfile KEYFILE] [--keypass KEYPASS] [arguments ...]
 
 positional arguments:
   arguments             a directory, files or texts
 
-optional arguments:
-  -h, --help            show this help message and exit
+general options:
   -b ADDRESS, --bind ADDRESS
                         bind address [default: all interfaces]
   -p PORT, --port PORT  port [default: 8888]
@@ -26,8 +25,13 @@ optional arguments:
   -a, --all             show all files, including hidden ones, only for directory
   -t, --text            for text
   -P [PASSWORD], --password [PASSWORD]
-                        access password, if no PASSWORD is specified, the environment
-                        variable SHARE_PASSWORD will be used
+                        access password, if no PASSWORD is specified, the environment variable SHARE_PASSWORD will be used
+  -h, --help            show this help message and exit
+
+tls options:
+  --certfile CERTFILE   cert file
+  --keyfile KEYFILE     key file
+  --keypass KEYPASS     key password
 ```
 
 # 截图

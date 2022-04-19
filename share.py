@@ -16,6 +16,7 @@ import io
 import stat
 import re
 import socket
+import ssl
 
 
 class ShareServer(ThreadingHTTPServer):
@@ -1076,9 +1077,20 @@ def print_prompt():
         sys.stderr.write('Enter your text, then press Ctrl + D:\n')
 
 
-def start_server(address, port, handler_class):
+def create_ssl_context(certfile, keyfile=None, password=None):
+    ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_3
+    ctx.maximum_version = ssl.TLSVersion.TLSv1_3
+    ctx.load_cert_chain(certfile=certfile, keyfile=keyfile, password=password)
+    return ctx
+
+
+def start_server(address, port, certfile, keyfile, keypass, handler_class):
     ShareServer.address_family, addr = get_best_family(address, port)
     with ShareServer(addr, handler_class) as server:
+        if certfile:
+            ctx = create_ssl_context(certfile, keyfile, keypass)
+            server.socket = ctx.wrap_socket(server.socket, server_side=True)
         host, port = server.socket.getsockname()[:2]
         sys.stderr.write(f'Serving HTTP on {host} port {port} ...\n')
         server.serve_forever()
@@ -1087,15 +1099,24 @@ def start_server(address, port, handler_class):
 def main():
     sys.tracebacklimit = 0
     signal.signal(signal.SIGINT, on_interrupt)
-    parser = argparse.ArgumentParser(allow_abbrev=False)
-    parser.add_argument('-b', '--bind', dest='address', help='bind address [default: all interfaces]')
-    parser.add_argument('-p', '--port', type=int, default=8888, help='port [default: 8888]')
-    parser.add_argument('-s', '--share', action='store_true', help='share mode (default mode)')
-    parser.add_argument('-r', '--receive', action='store_true', help='receive mode, can be used with -s option (only for directory)')
-    parser.add_argument('-a', '--all', action='store_true', help='show all files, including hidden ones, only for directory')
-    parser.add_argument('-t', '--text', action='store_true', help='for text')
-    parser.add_argument('-P', '--password', nargs='?', const=os.getenv('SHARE_PASSWORD'), help='access password, if no PASSWORD is specified, the environment variable SHARE_PASSWORD will be used')
+    parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
     parser.add_argument('arguments', nargs='*', help='a directory, files or texts')
+
+    general = parser.add_argument_group('general options')
+    general.add_argument('-b', '--bind', dest='address', help='bind address [default: all interfaces]')
+    general.add_argument('-p', '--port', type=int, default=8888, help='port [default: 8888]')
+    general.add_argument('-s', '--share', action='store_true', help='share mode (default mode)')
+    general.add_argument('-r', '--receive', action='store_true', help='receive mode, can be used with -s option (only for directory)')
+    general.add_argument('-a', '--all', action='store_true', help='show all files, including hidden ones, only for directory')
+    general.add_argument('-t', '--text', action='store_true', help='for text')
+    general.add_argument('-P', '--password', nargs='?', const=os.getenv('SHARE_PASSWORD'), help='access password, if no PASSWORD is specified, the environment variable SHARE_PASSWORD will be used')
+    general.add_argument('-h', '--help', action='help', help='show this help message and exit')
+
+    tls = parser.add_argument_group('tls options')
+    tls.add_argument('--certfile', help='cert file')
+    tls.add_argument('--keyfile', help='key file')
+    tls.add_argument('--keypass', help='key password')
+
     args = parser.parse_args()
     if args.password and len(args.password) < 3:
         raise ValueError('password is too short')
@@ -1147,7 +1168,7 @@ def main():
             else:
                 raise FileNotFoundError(f'{args.arguments[0]} is not a directory')
             handler_class = functools.partial(FileReceiveHandler, dir, password=args.password)
-    start_server(args.address, args.port, handler_class)
+    start_server(args.address, args.port, args.certfile, args.keyfile, args.keypass, handler_class)
 
 
 main()
