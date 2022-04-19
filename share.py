@@ -127,6 +127,10 @@ class BaseHandler(BaseHTTPRequestHandler):
         else:
             self.respond_redirect(redirect_location)
 
+    def send_response(self, code, message=None):
+        self.log_request(code)
+        self.send_response_only(code, message)
+
     def _validate_password(self):
         cookie = cookies.SimpleCookie(self.headers['Cookie'])
         password = cookie.get('password')
