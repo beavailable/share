@@ -51,8 +51,7 @@ tls options:
     ```
     curl -OJ http://{host}:{port}/file
     ```
-- 使用 curl 上传文件：
-    支持 POST 和 PUT 两种方式，所以你可以用：
+- 使用 curl 上传文件时，有 POST 和 PUT 两种方式，所以你可以用：
     ```
     curl -F file=@/path/to/file http://{host}:{port}
     ```
