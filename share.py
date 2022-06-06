@@ -67,12 +67,8 @@ class BaseHandler(BaseHTTPRequestHandler):
         if not self._password or self._validate_password():
             self.do_post()
             return
-        content_length = self.headers['Content-Length']
-        if not content_length or not content_length.isdecimal():
-            self.respond_bad_request()
-            return
-        content_length = int(content_length)
-        if content_length > 100:
+        content_length = self.get_content_length()
+        if not content_length or content_length > 100:
             self.respond_bad_request()
             return
         data = self.rfile.read(content_length).decode()
@@ -82,18 +78,32 @@ class BaseHandler(BaseHTTPRequestHandler):
             return
         self.respond_redirect_cookie(self.path, f'password={parse.quote_plus(self._password)}; path=/')
 
+    def do_PUT(self):
+        if not self._password or self._validate_password():
+            self.do_put()
+            return
+        self.respond_unauthorized()
+
     def do_get(self):
         self.respond_method_not_allowed()
 
     def do_post(self):
         self.respond_method_not_allowed()
 
-    def do_multipart(self, save_dir, redirect_location):
+    def do_put(self):
+        self.respond_method_not_allowed()
+
+    def get_content_length(self):
         content_length = self.headers['Content-Length']
         if not content_length or not content_length.isdecimal():
+            return None
+        return int(content_length)
+
+    def handle_multipart(self, save_dir, redirect_location):
+        content_length = self.get_content_length()
+        if not content_length:
             self.respond_bad_request()
             return
-        content_length = int(content_length)
         if not self._has_freespace(content_length):
             self.respond_internal_server_error()
             return
@@ -126,6 +136,24 @@ class BaseHandler(BaseHTTPRequestHandler):
             self.respond_forbidden()
         else:
             self.respond_redirect(redirect_location)
+
+    def handle_putfile(self, save_dir):
+        filename = os.path.basename(parse.unquote(self.path))
+        content_length = self.get_content_length()
+        if not content_length:
+            self.respond_bad_request()
+            return
+        try:
+            os.makedirs(save_dir, exist_ok=True)
+            with open(f'{save_dir}/{filename}', 'wb') as f:
+                while content_length:
+                    l = min(content_length, 65536)
+                    f.write(self.rfile.read(l))
+                    content_length -= l
+        except PermissionError:
+            self.respond_forbidden()
+        else:
+            self.respond_ok()
 
     def send_response(self, code, message=None):
         self.log_request(code)
@@ -200,13 +228,17 @@ class BaseHandler(BaseHTTPRequestHandler):
     def send_cookie(self, cookie):
         self.send_header('Set-Cookie', cookie)
 
-    def respond_ok(self, html):
+    def respond_ok(self, html=None):
         self.send_response(HTTPStatus.OK)
-        response = html.encode()
-        self.send_content_length(len(response))
-        self.send_content_type('text/html; charset=utf-8')
-        self.end_headers()
-        self.wfile.write(response)
+        if html:
+            response = html.encode()
+            self.send_content_length(len(response))
+            self.send_content_type('text/html; charset=utf-8')
+            self.end_headers()
+            self.wfile.write(response)
+        else:
+            self.send_content_length(0)
+            self.end_headers()
 
     def respond_redirect(self, location):
         self.send_response(HTTPStatus.SEE_OTHER)
@@ -230,6 +262,12 @@ class BaseHandler(BaseHTTPRequestHandler):
     def respond_bad_request(self):
         self.close_connection = True
         self.send_response(HTTPStatus.BAD_REQUEST)
+        self.send_content_length(0)
+        self.end_headers()
+
+    def respond_unauthorized(self):
+        self.close_connection = True
+        self.send_response(HTTPStatus.UNAUTHORIZED)
         self.send_content_length(0)
         self.end_headers()
 
@@ -548,13 +586,10 @@ class BaseFileShareHandler(BaseHandler):
 
     def _copy_file_range(self, src, dest, start, length):
         src.seek(start)
-        buf_size = 65536
         while length:
-            if length <= buf_size:
-                dest.write(src.read(length))
-                return
-            dest.write(src.read(buf_size))
-            length -= buf_size
+            l = min(length, 65536)
+            dest.write(src.read(l))
+            length -= l
 
     def _is_hidden_windows(self, file_path):
         return self._is_hidden_unix(file_path) or os.stat(file_path).st_file_attributes & stat.FILE_ATTRIBUTE_HIDDEN != 0
@@ -657,9 +692,15 @@ class DirectoryShareHandler(BaseFileShareHandler):
 
     def do_post(self):
         if self._upload:
-            self.do_multipart(self._dir.rstrip('/') + parse.unquote(self.path), self.path)
+            self.handle_multipart(self._dir.rstrip('/') + parse.unquote(self.path), self.path)
         else:
             super().do_post()
+
+    def do_put(self):
+        if self._upload:
+            self.handle_putfile(self._dir.rstrip('/') + os.path.dirname(parse.unquote(self.path)))
+        else:
+            super().do_put()
 
     def list_dir(self, dir):
         dirs, files = [], []
@@ -775,7 +816,10 @@ class FileReceiveHandler(BaseHandler):
         if self.path != '/':
             self.respond_bad_request()
             return
-        self.do_multipart(self._dir, '/')
+        self.handle_multipart(self._dir, '/')
+
+    def do_put(self):
+        self.handle_putfile(self._dir.rstrip('/') + os.path.dirname(parse.unquote(self.path)))
 
 
 class TextShareHandler(BaseHandler):
@@ -868,12 +912,8 @@ class TextReceiveHandler(BaseHandler):
         if content_type != 'application/x-www-form-urlencoded':
             self.respond_bad_request()
             return
-        content_length = self.headers['Content-Length']
-        if not content_length or not content_length.isdecimal():
-            self.respond_bad_request()
-            return
-        content_length = int(content_length)
-        if content_length <= 5 or content_length > 1048576:
+        content_length = self.get_content_length()
+        if not content_length or content_length <= 5 or content_length > 1048576:
             self.respond_bad_request()
             return
         text = self.rfile.read(5).decode()
