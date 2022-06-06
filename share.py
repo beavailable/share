@@ -116,6 +116,8 @@ class BaseHandler(BaseHTTPRequestHandler):
             self.respond_bad_request()
             return
         try:
+            os.makedirs(save_dir, exist_ok=True)
+            save_dir = save_dir.rstrip('/\\')
             parser = MultipartParser(self.rfile, boundary, content_length)
             while parser.has_next():
                 name = parser.next_name()
@@ -126,14 +128,14 @@ class BaseHandler(BaseHTTPRequestHandler):
                 if not filename:
                     self.respond_bad_request()
                     return
-                os.makedirs(save_dir, exist_ok=True)
-                save_dir = save_dir.rstrip('/\\')
                 with open(f'{save_dir}/{filename}', 'wb') as f:
                     parser.write_next_to(f)
         except MultipartError:
             self.respond_bad_request()
         except PermissionError:
             self.respond_forbidden()
+        except FileExistsError:
+            self.respond_internal_server_error()
         else:
             self.respond_redirect(redirect_location)
 
@@ -152,6 +154,8 @@ class BaseHandler(BaseHTTPRequestHandler):
                     content_length -= l
         except PermissionError:
             self.respond_forbidden()
+        except FileExistsError:
+            self.respond_internal_server_error()
         else:
             self.respond_ok()
 
