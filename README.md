@@ -8,6 +8,7 @@
 - 支持上传和下载
 - 支持范围请求
 - 支持密码分享
+- 支持 IPv6
 
 # 用法
 ```
@@ -38,15 +39,24 @@ tls options:
 ![img](https://github.com/beavailable/share/blob/main/screenshot.gif)
 
 # 提示
-如果你只有一个文件需要分享，下面这个简化的 url 可以帮助你快速访问到这个文件：
-```
-http://{host}:{port}/file
-```
-使用常见的命令行工具下载文件时，会收到`Content-Disposition`首部，因此如果需要保留原始文件名，可以用：
-```
-wget --content-disposition http://{host}:{port}/file
-```
-或者是：
-```
-curl -OJ http://{host}:{port}/file
-```
+- 如果你只有一个文件需要分享，下面这个简化的 url 可以帮助你快速访问到这个文件：
+    ```
+    http://{host}:{port}/file
+    ```
+    使用常见的命令行工具下载文件时，会收到`Content-Disposition`首部，因此如果需要保留原始文件名，可以用：
+    ```
+    wget --content-disposition http://{host}:{port}/file
+    ```
+    或者是：
+    ```
+    curl -OJ http://{host}:{port}/file
+    ```
+- 使用 curl 上传文件：
+    支持 POST 和 PUT 两种方式，所以你可以用：
+    ```
+    curl -F file=@/path/to/file http://{host}:{port}
+    ```
+    或者是：
+    ```
+    curl -T /path/to/file http://{host}:{port}
+    ```
