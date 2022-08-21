@@ -596,7 +596,10 @@ class BaseFileShareHandler(BaseHandler):
             length -= l
 
     def _is_hidden_windows(self, file_path):
-        return self._is_hidden_unix(file_path) or os.stat(file_path).st_file_attributes & stat.FILE_ATTRIBUTE_HIDDEN != 0
+        try:
+            return self._is_hidden_unix(file_path) or os.stat(file_path).st_file_attributes & stat.FILE_ATTRIBUTE_HIDDEN != 0
+        except FileNotFoundError:
+            return False
 
     def _is_hidden_unix(self, file_path):
         return os.path.basename(file_path).startswith('.')
