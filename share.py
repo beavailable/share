@@ -17,6 +17,7 @@ import stat
 import re
 import socket
 import ssl
+import zipfile
 
 
 class ShareServer(ThreadingHTTPServer):
@@ -215,6 +216,9 @@ class BaseHandler(BaseHTTPRequestHandler):
 
     def send_content_type(self, content_type):
         self.send_header('Content-Type', content_type)
+
+    def send_transfer_encoding(self, encoding):
+        self.send_header('Transfer-Encoding', encoding)
 
     def send_location(self, location):
         self.send_header('Location', location)
@@ -502,6 +506,9 @@ class BaseFileShareHandler(BaseHandler):
             builder.append('</a>')
             builder.append('<span class="item-right">')
             builder.append(f'<span class="size">{items} {"item" if items == 1 else "items"}</span>')
+            builder.append(f'<a class="btn-download" href="{html.escape(parse.quote(d + ".zip"))}" download>')
+            builder.append('<svg xmlns="http://www.w3.org/2000/svg" height="20" width="20" fill="#2965c7"><path d="M4.208 17.5q-.687 0-1.198-.5-.51-.5-.51-1.188V5.438q0-.334.115-.573.114-.24.281-.469L4.062 3q.167-.229.417-.365.25-.135.542-.135h9.958q.292 0 .542.135.25.136.437.365l1.167 1.396q.167.229.271.469.104.239.104.573v10.374q0 .688-.5 1.188t-1.188.5Zm.375-12.438h10.855l-.709-.812H5.292ZM4.25 15.75h11.5V6.812H4.25v8.938ZM10 14.396q.167 0 .333-.073.167-.073.292-.198l2.104-2.104q.25-.25.25-.604 0-.355-.25-.605t-.604-.25q-.354 0-.604.25l-.646.646v-2.5q0-.354-.26-.614-.261-.261-.615-.261t-.615.261q-.26.26-.26.614v2.5l-.646-.646q-.25-.25-.604-.25t-.604.25q-.25.25-.25.605 0 .354.25.604l2.104 2.104q.125.125.292.198.166.073.333.073ZM4.25 15.75V6.812v8.938Z"/></svg>')
+            builder.append('</a>')
             builder.append('</span>')
             builder.append('</li>')
         for f, hidden, size in files:
@@ -694,6 +701,10 @@ class DirectoryShareHandler(BaseFileShareHandler):
                 self.respond_ok(self.build_html(path, dirs, files))
         elif os.path.isfile(file_path):
             self.respond_for_file(file_path)
+        elif file_path.endswith('.zip'):
+            file_path = file_path[:-4]
+            if os.path.isdir(file_path):
+                self.respond_for_archive(file_path)
         else:
             self.respond_not_found()
 
@@ -709,7 +720,21 @@ class DirectoryShareHandler(BaseFileShareHandler):
         else:
             super().do_put()
 
+    def respond_for_archive(self, dir):
+        self.send_response(HTTPStatus.OK)
+        self.send_content_type('application/octet-stream')
+        self.send_transfer_encoding('chunked')
+        self.end_headers()
+        with ChunkWriter(self.wfile) as writer:
+            with zipfile.ZipFile(writer, 'w', zipfile.ZIP_DEFLATED, compresslevel=3, strict_timestamps=False) as zip:
+                try:
+                    self._archive(os.path.dirname(dir.rstrip('/')), dir, zip)
+                except (PermissionError, FileNotFoundError):
+                    pass
+
     def list_dir(self, dir):
+        if not dir.endswith('/'):
+            dir = dir + '/'
         dirs, files = [], []
         for name in os.listdir(dir):
             path = dir + name
@@ -730,6 +755,23 @@ class DirectoryShareHandler(BaseFileShareHandler):
                         pass
                     files.append((name, hidden, size))
         return (dirs, files)
+
+    def _archive(self, base_dir, dir, zip):
+        if not base_dir.endswith('/'):
+            base_dir = base_dir + '/'
+        if not dir.endswith('/'):
+            dir = dir + '/'
+        for name in os.listdir(dir):
+            path = dir + name
+            if self._all or not self.is_hidden(path):
+                if os.path.isdir(path):
+                    self._archive(base_dir, path, zip)
+                else:
+                    arcname = path[len(base_dir):]
+                    try:
+                        zip.write(path, arcname)
+                    except (PermissionError, FileNotFoundError):
+                        pass
 
     def _contains_hidden_segment_windows(self, path):
         prefix = self._dir
@@ -1103,6 +1145,29 @@ class MultipartState:
 
 class MultipartError(ValueError):
     pass
+
+
+class ChunkWriter:
+
+    def __init__(self, stream):
+        self._stream = stream
+
+    def write(self, data):
+        if not data:
+            return 0
+        self._stream.write(f'{hex(len(data))[2:]}\r\n'.encode())
+        n = self._stream.write(data)
+        self._stream.write(b'\r\n')
+        return n
+
+    def flush(self):
+        self._stream.flush()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self._stream.write(b'0\r\n\r\n')
 
 
 def get_best_family(host, port):
