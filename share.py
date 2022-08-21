@@ -722,7 +722,7 @@ class DirectoryShareHandler(BaseFileShareHandler):
 
     def respond_for_archive(self, dir):
         self.send_response(HTTPStatus.OK)
-        self.send_content_type('application/octet-stream')
+        self.send_content_type('application/zip')
         self.send_transfer_encoding('chunked')
         self.end_headers()
         with ChunkWriter(self.wfile) as writer:
