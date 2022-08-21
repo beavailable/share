@@ -705,6 +705,8 @@ class DirectoryShareHandler(BaseFileShareHandler):
             file_path = file_path[:-4]
             if os.path.isdir(file_path):
                 self.respond_for_archive(file_path)
+            else:
+                self.respond_not_found()
         else:
             self.respond_not_found()
 
