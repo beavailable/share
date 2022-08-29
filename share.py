@@ -728,7 +728,7 @@ class DirectoryShareHandler(BaseFileShareHandler):
         self.send_transfer_encoding('chunked')
         self.end_headers()
         with ChunkWriter(self.wfile) as writer:
-            with zipfile.ZipFile(writer, 'w', zipfile.ZIP_DEFLATED, compresslevel=3, strict_timestamps=False) as zip:
+            with zipfile.ZipFile(writer, 'w', zipfile.ZIP_STORED, strict_timestamps=False) as zip:
                 try:
                     self._archive(os.path.dirname(dir.rstrip('/')), dir, zip)
                 except (PermissionError, FileNotFoundError):
