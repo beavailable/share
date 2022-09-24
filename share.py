@@ -146,6 +146,9 @@ class BaseHandler(BaseHTTPRequestHandler):
         if not content_length:
             self.respond_bad_request()
             return
+        if not self._has_freespace(content_length):
+            self.respond_internal_server_error()
+            return
         try:
             os.makedirs(save_dir, exist_ok=True)
             with open(f'{save_dir}/{filename}', 'wb') as f:
