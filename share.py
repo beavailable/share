@@ -684,6 +684,9 @@ class DirectoryShareHandler(BaseFileShareHandler):
 
     def do_get(self):
         path, _ = self.split_path(parse.unquote(self.path))
+        if not self.is_secure_path(path):
+            self.respond_bad_request()
+            return
         if not self._all and self._contains_hidden_segment(path):
             self.respond_not_found()
             return
@@ -715,15 +718,29 @@ class DirectoryShareHandler(BaseFileShareHandler):
 
     def do_post(self):
         if self._upload:
-            self.handle_multipart(self._dir.rstrip('/') + parse.unquote(self.path), self.path)
+            path, _ = self.split_path(parse.unquote(self.path))
+            if not self.is_secure_path(path):
+                self.respond_bad_request()
+                return
+            self.handle_multipart(self._dir.rstrip('/') + path, parse.quote(path))
         else:
             super().do_post()
 
     def do_put(self):
         if self._upload:
-            self.handle_putfile(self._dir.rstrip('/') + os.path.dirname(parse.unquote(self.path)))
+            path, _ = self.split_path(parse.unquote(self.path))
+            if not self.is_secure_path(path):
+                self.respond_bad_request()
+                return
+            self.handle_putfile(self._dir.rstrip('/') + os.path.dirname(path))
         else:
             super().do_put()
+
+    def is_secure_path(self, path):
+        if path == '/':
+            return True
+        prefix = os.path.commonprefix((self._dir, os.path.realpath(self._dir.rstrip('/') + path)))
+        return prefix == self._dir
 
     def respond_for_archive(self, dir):
         self.send_response(HTTPStatus.OK)
