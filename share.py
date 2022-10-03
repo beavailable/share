@@ -329,17 +329,15 @@ class BaseFileShareHandler(BaseHandler):
         super().__init__(*args, **kwargs)
 
     def split_path(self, path):
-        parts = path.split('?', 1)
-        path = parts[0]
-        params = {}
-        if len(parts) > 1:
-            query = parts[1]
-            for q in query.split('&'):
-                if q:
-                    words = q.split('=')
-                    if len(words) == 2:
-                        params[words[0]] = words[1]
-        return (path, params)
+        path, _, query = path.partition('?')
+        path = parse.unquote(self.path)
+        parts = []
+        for p in path.split('/'):
+            if p == '..':
+                parts.pop()
+            elif p and p != '.':
+                parts.append(p)
+        return ('/' + '/'.join(parts), query)
 
     def respond_for_file(self, file):
         include_content_disposition = self._is_from_commandline()
@@ -645,7 +643,11 @@ class FileShareHandler(BaseFileShareHandler):
         super().__init__(*args, **kwargs)
 
     def do_get(self):
-        path, _ = self.split_path(parse.unquote(self.path))
+        try:
+            path, _ = self.split_path(self.path)
+        except IndexError:
+            self.respond_bad_request()
+            return
         if path == '/':
             files = []
             for f in self._files:
@@ -683,8 +685,9 @@ class DirectoryShareHandler(BaseFileShareHandler):
         super().__init__(*args, **kwargs)
 
     def do_get(self):
-        path, _ = self.split_path(parse.unquote(self.path))
-        if not self.is_secure_path(path):
+        try:
+            path, _ = self.split_path(self.path)
+        except IndexError:
             self.respond_bad_request()
             return
         if not self._all and self._contains_hidden_segment(path):
@@ -718,8 +721,9 @@ class DirectoryShareHandler(BaseFileShareHandler):
 
     def do_post(self):
         if self._upload:
-            path, _ = self.split_path(parse.unquote(self.path))
-            if not self.is_secure_path(path):
+            try:
+                path, _ = self.split_path(self.path)
+            except IndexError:
                 self.respond_bad_request()
                 return
             self.handle_multipart(self._dir.rstrip('/') + path, parse.quote(path))
@@ -728,8 +732,9 @@ class DirectoryShareHandler(BaseFileShareHandler):
 
     def do_put(self):
         if self._upload:
-            path, _ = self.split_path(parse.unquote(self.path))
-            if not self.is_secure_path(path):
+            try:
+                path, _ = self.split_path(self.path)
+            except IndexError:
                 self.respond_bad_request()
                 return
             self.handle_putfile(self._dir.rstrip('/') + os.path.dirname(path))
