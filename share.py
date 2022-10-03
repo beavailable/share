@@ -337,7 +337,10 @@ class BaseFileShareHandler(BaseHandler):
                 parts.pop()
             elif p and p != '.':
                 parts.append(p)
-        return ('/' + '/'.join(parts), query)
+        collapsed_path = '/' + '/'.join(parts)
+        if path != '/' and path.endswith('/'):
+            collapsed_path += '/'
+        return (collapsed_path, query)
 
     def respond_for_file(self, file):
         include_content_disposition = self._is_from_commandline()
