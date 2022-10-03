@@ -330,7 +330,7 @@ class BaseFileShareHandler(BaseHandler):
 
     def split_path(self, path):
         path, _, query = path.partition('?')
-        path = parse.unquote(self.path)
+        path = parse.unquote(path)
         parts = []
         for p in path.split('/'):
             if p == '..':
