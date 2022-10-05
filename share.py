@@ -140,8 +140,7 @@ class BaseHandler(BaseHTTPRequestHandler):
         else:
             self.respond_redirect(redirect_location)
 
-    def handle_putfile(self, save_dir):
-        filename = os.path.basename(parse.unquote(self.path))
+    def handle_putfile(self, file_path):
         content_length = self.get_content_length()
         if not content_length:
             self.respond_bad_request()
@@ -150,8 +149,8 @@ class BaseHandler(BaseHTTPRequestHandler):
             self.respond_internal_server_error()
             return
         try:
-            os.makedirs(save_dir, exist_ok=True)
-            with open(f'{save_dir}/{filename}', 'wb') as f:
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            with open(file_path, 'wb') as f:
                 while content_length:
                     l = min(content_length, 65536)
                     f.write(self.rfile.read(l))
@@ -213,6 +212,20 @@ class BaseHandler(BaseHTTPRequestHandler):
         if key != 'boundary':
             return None
         return value
+
+    def _split_path(self, path):
+        path, _, query = path.partition('?')
+        path = parse.unquote(path)
+        parts = []
+        for p in path.split('/'):
+            if p == '..':
+                parts.pop()
+            elif p and p != '.':
+                parts.append(p)
+        collapsed_path = '/' + '/'.join(parts)
+        if path != '/' and path.endswith('/'):
+            collapsed_path += '/'
+        return (collapsed_path, query)
 
     def send_content_length(self, content_length):
         self.send_header('Content-Length', str(content_length))
@@ -327,20 +340,6 @@ class BaseFileShareHandler(BaseHandler):
         else:
             self.is_hidden = self._is_hidden_unix
         super().__init__(*args, **kwargs)
-
-    def split_path(self, path):
-        path, _, query = path.partition('?')
-        path = parse.unquote(path)
-        parts = []
-        for p in path.split('/'):
-            if p == '..':
-                parts.pop()
-            elif p and p != '.':
-                parts.append(p)
-        collapsed_path = '/' + '/'.join(parts)
-        if path != '/' and path.endswith('/'):
-            collapsed_path += '/'
-        return (collapsed_path, query)
 
     def respond_for_file(self, file):
         include_content_disposition = self._is_from_commandline()
@@ -647,7 +646,7 @@ class FileShareHandler(BaseFileShareHandler):
 
     def do_get(self):
         try:
-            path, _ = self.split_path(self.path)
+            path, _ = self._split_path(self.path)
         except IndexError:
             self.respond_bad_request()
             return
@@ -689,7 +688,7 @@ class DirectoryShareHandler(BaseFileShareHandler):
 
     def do_get(self):
         try:
-            path, _ = self.split_path(self.path)
+            path, _ = self._split_path(self.path)
         except IndexError:
             self.respond_bad_request()
             return
@@ -725,7 +724,7 @@ class DirectoryShareHandler(BaseFileShareHandler):
     def do_post(self):
         if self._upload:
             try:
-                path, _ = self.split_path(self.path)
+                path, _ = self._split_path(self.path)
             except IndexError:
                 self.respond_bad_request()
                 return
@@ -736,11 +735,11 @@ class DirectoryShareHandler(BaseFileShareHandler):
     def do_put(self):
         if self._upload:
             try:
-                path, _ = self.split_path(self.path)
+                path, _ = self._split_path(self.path)
             except IndexError:
                 self.respond_bad_request()
                 return
-            self.handle_putfile(self._dir.rstrip('/') + os.path.dirname(path))
+            self.handle_putfile(self._dir.rstrip('/') + path)
         else:
             super().do_put()
 
@@ -898,7 +897,12 @@ class FileReceiveHandler(BaseHandler):
         self.handle_multipart(self._dir, '/')
 
     def do_put(self):
-        self.handle_putfile(self._dir.rstrip('/') + os.path.dirname(parse.unquote(self.path)))
+        try:
+            path, _ = self._split_path(self.path)
+        except IndexError:
+            self.respond_bad_request()
+            return
+        self.handle_putfile(self._dir.rstrip('/') + path)
 
 
 class TextShareHandler(BaseHandler):
