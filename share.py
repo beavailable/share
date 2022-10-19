@@ -129,7 +129,7 @@ class BaseHandler(BaseHTTPRequestHandler):
                 if not filename:
                     self.respond_bad_request()
                     return
-                with open(f'{save_dir}/{filename}', 'wb') as f:
+                with open(f'{save_dir}/{os.path.basename(filename)}', 'wb') as f:
                     parser.write_next_to(f)
         except MultipartError:
             self.respond_bad_request()
