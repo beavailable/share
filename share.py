@@ -743,12 +743,6 @@ class DirectoryShareHandler(BaseFileShareHandler):
         else:
             super().do_put()
 
-    def is_secure_path(self, path):
-        if path == '/':
-            return True
-        prefix = os.path.commonprefix((self._dir, os.path.realpath(self._dir.rstrip('/') + path)))
-        return prefix == self._dir
-
     def respond_for_archive(self, dir):
         self.send_response(HTTPStatus.OK)
         self.send_content_type('application/zip')
