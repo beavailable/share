@@ -803,6 +803,8 @@ class DirectoryShareHandler(BaseFileShareHandler):
                         pass
 
     def _contains_hidden_segment_windows(self, path):
+        if path == '/':
+            return False
         prefix = self._dir
         for segment in path.strip('/').split('/'):
             if self.is_hidden(prefix + segment):
