@@ -553,7 +553,7 @@ class BaseFileShareHandler(BaseHandler):
                 ch2 += 32
             if ch1 == ch2:
                 i += 1
-            elif 48 <= ch1 <= 57 and 48 <= ch2 <= 57:
+            elif 49 <= ch1 <= 57 and 49 <= ch2 <= 57:
                 num1, idx1 = self._check_number(s1, len1, i)
                 num2, idx2 = self._check_number(s2, len2, i)
                 if num1 != num2:
