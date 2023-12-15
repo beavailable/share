@@ -355,6 +355,8 @@ class BaseFileShareHandler(BaseHandler):
             filename = os.path.basename(file)
             filesize = os.path.getsize(file)
             content_type = self._guess_type(file)
+            if content_type.startswith('text'):
+                content_type += '; charset=utf-8'
             content_range = self.headers['Range']
             if filesize == 0 or not content_range:
                 self.send_response(HTTPStatus.OK)
