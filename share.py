@@ -429,7 +429,7 @@ class BaseFileShareHandler(BaseHandler):
             builder.append('function on_dragenter(e){')
             builder.append('    e.preventDefault();')
             builder.append('    drag_counter++;')
-            builder.append('    if (drag_counter > 0) {')
+            builder.append('    if (drag_counter === 1) {')
             builder.append('        let types = e.dataTransfer.types;')
             builder.append('        if (types[types.length - 1] === "Files") {')
             builder.append('            e.currentTarget.classList.add("dragging");')
