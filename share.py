@@ -417,54 +417,60 @@ class BaseFileShareHandler(BaseHandler):
         builder.end_style()
         if self._upload:
             builder.start_script()
-            builder.append('function on_upload_click(){')
-            builder.append('    document.getElementById("file").click();')
-            builder.append('}')
-            builder.append('function on_upload(){')
-            builder.append('    document.getElementById("upload").setAttribute("disabled", "");')
-            builder.append('    document.getElementById("form").submit();')
-            builder.append('}')
-            builder.append('let drag_counter = 0;')
-            builder.append('function on_dragenter(e){')
-            builder.append('    e.preventDefault();')
-            builder.append('    drag_counter++;')
-            builder.append('    if (drag_counter === 1) {')
-            builder.append('        let types = e.dataTransfer.types;')
-            builder.append('        if (types[types.length - 1] === "Files") {')
-            builder.append('            e.currentTarget.classList.add("dragging");')
-            builder.append('        }')
-            builder.append('    }')
-            builder.append('}')
-            builder.append('function on_dragover(e){')
-            builder.append('    e.preventDefault();')
-            builder.append('}')
-            builder.append('function on_dragleave(e){')
-            builder.append('    e.preventDefault();')
-            builder.append('    drag_counter--;')
-            builder.append('    if (drag_counter === 0) {')
-            builder.append('        e.currentTarget.classList.remove("dragging");')
-            builder.append('    }')
-            builder.append('}')
-            builder.append('function on_drop(e){')
-            builder.append('    e.preventDefault();')
-            builder.append('    drag_counter = 0;')
-            builder.append('    e.currentTarget.classList.remove("dragging");')
-            builder.append('    if (e.dataTransfer.files.length == 0) {return;}')
-            builder.append('    document.getElementById("file").files = e.dataTransfer.files;')
-            builder.append('    on_upload();')
-            builder.append('}')
-            builder.append('function on_load() {')
-            builder.append('    let upload = document.getElementById("upload");')
-            builder.append('    upload.onclick = on_upload_click;')
-            builder.append('    let content = document.getElementById("content");')
-            builder.append('    content.ondragenter = on_dragenter;')
-            builder.append('    content.ondragover = on_dragover;')
-            builder.append('    content.ondragleave = on_dragleave;')
-            builder.append('    content.ondrop = on_drop;')
-            builder.append('    let file = document.getElementById("file");')
-            builder.append('    file.onchange = on_upload;')
-            builder.append('}')
-            builder.append('window.onload = on_load;')
+            builder.append('''
+function on_upload_click() {
+    document.getElementById("file").click();
+}
+function on_upload() {
+    document.getElementById("upload").setAttribute("disabled", "");
+    document.getElementById("form").submit();
+}
+
+let drag_counter = 0;
+
+function on_dragenter(e) {
+    e.preventDefault();
+    drag_counter++;
+    if (drag_counter === 1) {
+        let types = e.dataTransfer.types;
+        if (types[types.length - 1] === "Files") {
+            e.currentTarget.classList.add("dragging");
+        }
+    }
+}
+function on_dragover(e) {
+    e.preventDefault();
+}
+function on_dragleave(e) {
+    e.preventDefault();
+    drag_counter--;
+    if (drag_counter === 0) {
+        e.currentTarget.classList.remove("dragging");
+    }
+}
+function on_drop(e) {
+    e.preventDefault();
+    drag_counter = 0;
+    e.currentTarget.classList.remove("dragging");
+    if (e.dataTransfer.files.length > 0) {
+        document.getElementById("file").files = e.dataTransfer.files;
+        on_upload();
+    }
+}
+function on_load() {
+    let upload = document.getElementById("upload");
+    upload.onclick = on_upload_click;
+    let content = document.getElementById("content");
+    content.ondragenter = on_dragenter;
+    content.ondragover = on_dragover;
+    content.ondragleave = on_dragleave;
+    content.ondrop = on_drop;
+    let file = document.getElementById("file");
+    file.onchange = on_upload;
+}
+
+window.onload = on_load;
+''')
             builder.end_script()
         builder.end_head()
         builder.start_body()
@@ -823,53 +829,59 @@ class FileReceiveHandler(BaseHandler):
         builder.append('.dragging{border: 4px dashed #cccccc;}')
         builder.end_style()
         builder.start_script()
-        builder.append('function on_upload_click(){')
-        builder.append('    document.getElementById("file").click();')
-        builder.append('}')
-        builder.append('function on_upload(){')
-        builder.append('    document.getElementById("upload").setAttribute("disabled", "");')
-        builder.append('    document.getElementById("form").submit();')
-        builder.append('}')
-        builder.append('let drag_counter = 0;')
-        builder.append('function on_dragenter(e){')
-        builder.append('    e.preventDefault();')
-        builder.append('    drag_counter++;')
-        builder.append('    if (drag_counter === 1) {')
-        builder.append('        let types = e.dataTransfer.types;')
-        builder.append('        if (types[types.length - 1] === "Files") {')
-        builder.append('            e.currentTarget.classList.add("dragging");')
-        builder.append('        }')
-        builder.append('    }')
-        builder.append('}')
-        builder.append('function on_dragover(e){')
-        builder.append('    e.preventDefault();')
-        builder.append('}')
-        builder.append('function on_dragleave(e){')
-        builder.append('    e.preventDefault();')
-        builder.append('    drag_counter--;')
-        builder.append('    if (drag_counter === 0) {')
-        builder.append('        e.currentTarget.classList.remove("dragging");')
-        builder.append('    }')
-        builder.append('}')
-        builder.append('function on_drop(e){')
-        builder.append('    e.preventDefault();')
-        builder.append('    drag_counter = 0;')
-        builder.append('    e.currentTarget.classList.remove("dragging");')
-        builder.append('    if (e.dataTransfer.files.length == 0) {return;}')
-        builder.append('    document.getElementById("file").files = e.dataTransfer.files;')
-        builder.append('    on_upload();')
-        builder.append('}')
-        builder.append('function on_load() {')
-        builder.append('    let upload = document.getElementById("upload");')
-        builder.append('    upload.onclick = on_upload_click;')
-        builder.append('    upload.ondragenter = on_dragenter;')
-        builder.append('    upload.ondragover = on_dragover;')
-        builder.append('    upload.ondragleave = on_dragleave;')
-        builder.append('    upload.ondrop = on_drop;')
-        builder.append('    let file = document.getElementById("file");')
-        builder.append('    file.onchange = on_upload;')
-        builder.append('}')
-        builder.append('window.onload = on_load;')
+        builder.append('''
+function on_upload_click() {
+    document.getElementById("file").click();
+}
+function on_upload() {
+    document.getElementById("upload").setAttribute("disabled", "");
+    document.getElementById("form").submit();
+}
+
+let drag_counter = 0;
+
+function on_dragenter(e) {
+    e.preventDefault();
+    drag_counter++;
+    if (drag_counter === 1) {
+        let types = e.dataTransfer.types;
+        if (types[types.length - 1] === "Files") {
+            e.currentTarget.classList.add("dragging");
+        }
+    }
+}
+function on_dragover(e) {
+    e.preventDefault();
+}
+function on_dragleave(e) {
+    e.preventDefault();
+    drag_counter--;
+    if (drag_counter === 0) {
+        e.currentTarget.classList.remove("dragging");
+    }
+}
+function on_drop(e) {
+    e.preventDefault();
+    drag_counter = 0;
+    e.currentTarget.classList.remove("dragging");
+    if (e.dataTransfer.files.length > 0) {
+        document.getElementById("file").files = e.dataTransfer.files;
+        on_upload();
+    }
+}
+function on_load() {
+    let upload = document.getElementById("upload");
+    upload.onclick = on_upload_click;
+    upload.ondragenter = on_dragenter;
+    upload.ondragover = on_dragover;
+    upload.ondragleave = on_dragleave;
+    upload.ondrop = on_drop;
+    let file = document.getElementById("file");
+    file.onchange = on_upload;
+}
+
+window.onload = on_load;
+''')
         builder.end_script()
         builder.end_head()
         builder.start_body()
@@ -952,22 +964,27 @@ class TextReceiveHandler(BaseHandler):
         builder.append('.submit{width: 100%;}')
         builder.end_style()
         builder.start_script()
-        builder.append('function on_keydown(e){')
-        builder.append('    if (e.key=="Control"){return;}')
-        builder.append('    if (e.ctrlKey && e.key=="Enter") {')
-        builder.append('        form = document.getElementById("form");')
-        builder.append('        if (form.reportValidity()) {')
-        builder.append('            form.submit();')
-        builder.append('            e.preventDefault();')
-        builder.append('            e.stopPropagation();')
-        builder.append('        }')
-        builder.append('    }')
-        builder.append('}')
-        builder.append('function on_load() {')
-        builder.append('    text = document.getElementById("text");')
-        builder.append('    text.onkeydown = on_keydown;')
-        builder.append('}')
-        builder.append('window.onload = on_load;')
+        builder.append('''
+function on_keydown(e) {
+    if (e.key === "Control") {
+        return;
+    }
+    if (e.ctrlKey && e.key === "Enter") {
+        form = document.getElementById("form");
+        if (form.reportValidity()) {
+            form.submit();
+            e.preventDefault();
+            e.stopPropagation();
+        }
+    }
+}
+function on_load() {
+    text = document.getElementById("text");
+    text.onkeydown = on_keydown;
+}
+
+window.onload = on_load;
+''')
         builder.end_script()
         builder.end_head()
         builder.start_body()
