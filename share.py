@@ -12,7 +12,6 @@ import mimetypes
 import shutil
 import base64
 import time
-import io
 import stat
 import re
 import socket
@@ -996,69 +995,66 @@ class TextReceiveHandler(BaseHandler):
 class HtmlBuilder:
 
     def __init__(self):
-        self._out = io.StringIO()
+        self._list = []
 
     def start_head(self):
-        self._out.write('<!DOCTYPE html>')
-        self._out.write('<html>')
-        self._out.write('<head>')
-        self._out.write('<meta name="viewport" content="width=device-width,initial-scale=1.0,minimum-scale=1.0"/>')
+        self._list.append('<!DOCTYPE html>')
+        self._list.append('<html>')
+        self._list.append('<head>')
+        self._list.append('<meta name="viewport" content="width=device-width,initial-scale=1.0,minimum-scale=1.0"/>')
 
     def end_head(self):
-        self._out.write('</head>')
+        self._list.append('</head>')
 
     def start_title(self):
-        self._out.write('<title>')
+        self._list.append('<title>')
 
     def end_title(self):
-        self._out.write('</title>')
+        self._list.append('</title>')
 
     def start_style(self):
-        self._out.write('<style type="text/css">')
-        self._out.write('*{margin: 0; padding: 0; box-sizing: border-box;}')
-        self._out.write('@media (min-width: 576px) {')
-        self._out.write('html{padding-left: calc(100vw - 100%);}')
-        self._out.write('body{width: 80vw;}')
-        self._out.write('}')
-        self._out.write('@media (min-width: 768px) {')
-        self._out.write('body{width: 70vw;}')
-        self._out.write('}')
-        self._out.write('@media (min-width: 992px) {')
-        self._out.write('body{width: 60vw;}')
-        self._out.write('}')
-        self._out.write('@media (min-width: 1200px) {')
-        self._out.write('body{width: 50vw;}')
-        self._out.write('}')
-        self._out.write('html{height: 100%;}')
-        self._out.write('body{height: 100%; margin: 0 auto; font-family: sans-serif;}')
-        self._out.write('input{padding: 1px 2px;}')
-        self._out.write('button, input[type="submit"]{padding: 1px 6px;}')
-        self._out.write('textarea{padding: 2px;}')
+        self._list.append('<style type="text/css">')
+        self._list.append('*{margin: 0; padding: 0; box-sizing: border-box;}')
+        self._list.append('@media (min-width: 576px) {')
+        self._list.append('html{padding-left: calc(100vw - 100%);}')
+        self._list.append('body{width: 80vw;}')
+        self._list.append('}')
+        self._list.append('@media (min-width: 768px) {')
+        self._list.append('body{width: 70vw;}')
+        self._list.append('}')
+        self._list.append('@media (min-width: 992px) {')
+        self._list.append('body{width: 60vw;}')
+        self._list.append('}')
+        self._list.append('@media (min-width: 1200px) {')
+        self._list.append('body{width: 50vw;}')
+        self._list.append('}')
+        self._list.append('html{height: 100%;}')
+        self._list.append('body{height: 100%; margin: 0 auto; font-family: sans-serif;}')
+        self._list.append('input{padding: 1px 2px;}')
+        self._list.append('button, input[type="submit"]{padding: 1px 6px;}')
+        self._list.append('textarea{padding: 2px;}')
 
     def end_style(self):
-        self._out.write('</style>')
+        self._list.append('</style>')
 
     def start_script(self):
-        self._out.write('<script type="text/javascript">')
+        self._list.append('<script type="text/javascript">')
 
     def end_script(self):
-        self._out.write('</script>')
+        self._list.append('</script>')
 
     def start_body(self):
-        self._out.write('<body>')
+        self._list.append('<body>')
 
     def end_body(self):
-        self._out.write('</body>')
+        self._list.append('</body>')
 
     def append(self, code):
-        self._out.write(code)
+        self._list.append(code)
 
     def build(self):
-        self._out.write('</html>')
-        return self._out.getvalue()
-
-    def __del__(self):
-        self._out.close()
+        self._list.append('</html>')
+        return ''.join(self._list)
 
 
 class MultipartParser:
