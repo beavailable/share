@@ -544,14 +544,14 @@ window.onload = on_load;
                 ch1 += 32
             if 65 <= ch2 <= 90:
                 ch2 += 32
-            if ch1 == ch2:
-                i += 1
-            elif 49 <= ch1 <= 57 and 49 <= ch2 <= 57:
+            if 49 <= ch1 <= 57 and 49 <= ch2 <= 57:
                 num1, idx1 = self._check_number(s1, len1, i)
                 num2, idx2 = self._check_number(s2, len2, i)
                 if num1 != num2:
                     return num1 - num2
                 i = idx1
+            elif ch1 == ch2:
+                i += 1
             else:
                 return ch1 - ch2
         return len1 - len2
