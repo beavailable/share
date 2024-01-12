@@ -497,7 +497,7 @@ window.onload = on_load;
         for d, hidden, items in dirs:
             builder.append('<li class="list-item">')
             builder.append(f'<a class="item-left{" hidden" if hidden else ""}" href="{html.escape(parse.quote(d))}/">')
-            builder.append('<svg class="item-icon" xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 0 24 24" width="20px" fill="#76797b"><path d="M0 0h24v24H0z" fill="none"/><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>')
+            builder.append('<svg class="item-icon" xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 0 24 24" width="20px" fill="#76797b"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>')
             builder.append(f'{html.escape(d)}')
             builder.append('</a>')
             builder.append('<span class="item-right">')
@@ -516,7 +516,7 @@ window.onload = on_load;
             builder.append('<span class="item-right">')
             builder.append(f'<span class="size">{self._format_size(size)}</span>')
             builder.append(f'<a class="btn-download" href="{html.escape(parse.quote(f))}" download>')
-            builder.append('<svg xmlns="http://www.w3.org/2000/svg" enable-background="new 0 0 24 24" height="20px" viewBox="0 0 24 24" width="20px" fill="#2965c7"><g><rect fill="none" height="20" width="20"/></g><g><path d="M18,15v3H6v-3H4v3c0,1.1,0.9,2,2,2h12c1.1,0,2-0.9,2-2v-3H18z M17,11l-1.41-1.41L13,12.17V4h-2v8.17L8.41,9.59L7,11l5,5 L17,11z"/></g></svg>')
+            builder.append('<svg xmlns="http://www.w3.org/2000/svg" enable-background="new 0 0 24 24" height="20px" viewBox="0 0 24 24" width="20px" fill="#2965c7"><g><path d="M18,15v3H6v-3H4v3c0,1.1,0.9,2,2,2h12c1.1,0,2-0.9,2-2v-3H18z M17,11l-1.41-1.41L13,12.17V4h-2v8.17L8.41,9.59L7,11l5,5 L17,11z"/></g></svg>')
             builder.append('</a>')
             builder.append('</span>')
             builder.append('</li>')
