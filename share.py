@@ -402,7 +402,7 @@ class BaseFileShareHandler(BaseHandler):
         builder.append('.item-left{display: flex;}')
         builder.append('.item-right{min-width: 140px; max-width: 140px; display: flex; justify-content: flex-end;}')
         builder.append('.item-icon{flex: none; margin-right: 4px;}')
-        builder.append('.size{color: #666666;}')
+        builder.append('.size{font-size: smaller; color: #666666;}')
         builder.append('iframe{border: 0;}')
         builder.append('a{color: #2965c7; text-decoration: none;}')
         builder.append('a.hidden{color: #42a5f5;}')
