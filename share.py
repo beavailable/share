@@ -320,9 +320,7 @@ class BaseHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def log_request(self, code, size=None):
-        if isinstance(code, HTTPStatus):
-            code = code.value
-        self.log_message('%s %s %s', self.command, str(code), parse.unquote(self.path))
+        self.log_message('%s %d %s', self.command, code, parse.unquote(self.path))
 
     def log_message(self, format, *args):
         year, month, day, hh, mm, ss, x, y, z = time.localtime()
