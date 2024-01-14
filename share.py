@@ -749,9 +749,6 @@ class FileReceiveHandler(BaseHandler):
         super().__init__(*args, **kwargs)
 
     def do_get(self):
-        if self.path != '/':
-            self.respond_redirect('/')
-            return
         self.respond_ok(self.build_html())
 
     def build_html(self):
@@ -827,7 +824,7 @@ window.onload = on_load;
         builder.append('<div class="container">')
         builder.append('<button id="upload" class="upload">')
         builder.append('Upload')
-        builder.append('<form id="form" action="/" method="post" enctype="multipart/form-data" style="display: none;">')
+        builder.append(f'<form id="form" action="{self.path}" method="post" enctype="multipart/form-data" style="display: none;">')
         builder.append('<input id="file" name="file" type="file" required multiple>')
         builder.append('</form>')
         builder.append('</button>')
@@ -836,10 +833,8 @@ window.onload = on_load;
         return builder.build()
 
     def do_post(self):
-        if self.path != '/':
-            self.respond_bad_request()
-            return
-        self.handle_multipart(self._dir, '/')
+        path, _ = self._split_path(self.path)
+        self.handle_multipart(self._dir.rstrip('/') + path, parse.quote(path))
 
     def do_put(self):
         path, _ = self._split_path(self.path)
