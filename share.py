@@ -165,6 +165,16 @@ class BaseHandler(BaseHTTPRequestHandler):
         self.log_request(code)
         self.send_response_only(code, message)
 
+    def send_error(self, code, message=None, explain=None):
+        try:
+            path = parse.unquote(self.path)
+        except AttributeError:
+            path = ''
+        self.log_error('%s %d %s', self.command if self.command else '???', code, path)
+        self.send_response_only(code, message)
+        self.send_header('Connection', 'close')
+        self.end_headers()
+
     def _validate_password(self):
         cookie = cookies.SimpleCookie(self.headers['Cookie'])
         password = cookie.get('password')
@@ -278,46 +288,25 @@ class BaseHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def respond_range_not_satisfiable(self):
-        self.close_connection = True
-        self.send_response(HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
-        self.send_content_length(0)
-        self.end_headers()
+        self.send_error(HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
 
     def respond_bad_request(self):
-        self.close_connection = True
-        self.send_response(HTTPStatus.BAD_REQUEST)
-        self.send_content_length(0)
-        self.end_headers()
+        self.send_error(HTTPStatus.BAD_REQUEST)
 
     def respond_unauthorized(self):
-        self.close_connection = True
-        self.send_response(HTTPStatus.UNAUTHORIZED)
-        self.send_content_length(0)
-        self.end_headers()
+        self.send_error(HTTPStatus.UNAUTHORIZED)
 
     def respond_forbidden(self):
-        self.close_connection = True
-        self.send_response(HTTPStatus.FORBIDDEN)
-        self.send_content_length(0)
-        self.end_headers()
+        self.send_error(HTTPStatus.FORBIDDEN)
 
     def respond_not_found(self):
-        self.close_connection = True
-        self.send_response(HTTPStatus.NOT_FOUND)
-        self.send_content_length(0)
-        self.end_headers()
+        self.send_error(HTTPStatus.NOT_FOUND)
 
     def respond_method_not_allowed(self):
-        self.close_connection = True
-        self.send_response(HTTPStatus.METHOD_NOT_ALLOWED)
-        self.send_content_length(0)
-        self.end_headers()
+        self.send_error(HTTPStatus.METHOD_NOT_ALLOWED)
 
     def respond_internal_server_error(self):
-        self.close_connection = True
-        self.send_response(HTTPStatus.INTERNAL_SERVER_ERROR)
-        self.send_content_length(0)
-        self.end_headers()
+        self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR)
 
     def log_request(self, code, size=None):
         self.log_message('%s %d %s', self.command, code, parse.unquote(self.path))
