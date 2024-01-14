@@ -494,28 +494,28 @@ window.onload = on_load;
         builder.append('<div class="main">')
         builder.append('<div id="content" class="content">')
         builder.append('<ul>')
-        for d, hidden, items in dirs:
+        for d in dirs:
             builder.append('<li class="list-item">')
-            builder.append(f'<a class="item-left{" hidden" if hidden else ""}" href="{html.escape(parse.quote(d))}/">')
+            builder.append(f'<a class="item-left{" hidden" if d.hidden else ""}" href="{html.escape(parse.quote(d.name))}/">')
             builder.append('<svg class="item-icon" xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 0 24 24" width="20px" fill="#76797b"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>')
-            builder.append(f'{html.escape(d)}')
+            builder.append(f'{html.escape(d.name)}')
             builder.append('</a>')
             builder.append('<span class="item-right">')
-            builder.append(f'<span class="size">{items} {"item" if items == 1 else "items"}</span>')
-            builder.append(f'<a class="btn-download" href="{html.escape(parse.quote(d + ".zip"))}" title="Package" download>')
+            builder.append(f'<span class="size">{d.size} {"item" if d.size == 1 else "items"}</span>')
+            builder.append(f'<a class="btn-download" href="{html.escape(parse.quote(d.name + ".zip"))}" title="Package" download>')
             builder.append('<svg xmlns="http://www.w3.org/2000/svg" height="20" width="20" fill="#2965c7"><path d="M4.208 17.5q-.687 0-1.198-.5-.51-.5-.51-1.188V5.438q0-.334.115-.573.114-.24.281-.469L4.062 3q.167-.229.417-.365.25-.135.542-.135h9.958q.292 0 .542.135.25.136.437.365l1.167 1.396q.167.229.271.469.104.239.104.573v10.374q0 .688-.5 1.188t-1.188.5Zm.375-12.438h10.855l-.709-.812H5.292ZM4.25 15.75h11.5V6.812H4.25v8.938ZM10 14.396q.167 0 .333-.073.167-.073.292-.198l2.104-2.104q.25-.25.25-.604 0-.355-.25-.605t-.604-.25q-.354 0-.604.25l-.646.646v-2.5q0-.354-.26-.614-.261-.261-.615-.261t-.615.261q-.26.26-.26.614v2.5l-.646-.646q-.25-.25-.604-.25t-.604.25q-.25.25-.25.605 0 .354.25.604l2.104 2.104q.125.125.292.198.166.073.333.073ZM4.25 15.75V6.812v8.938Z"/></svg>')
             builder.append('</a>')
             builder.append('</span>')
             builder.append('</li>')
-        for f, hidden, size in files:
+        for f in files:
             builder.append('<li class="list-item">')
-            builder.append(f'<a class="item-left{" hidden" if hidden else ""}" href="{html.escape(parse.quote(f))}">')
+            builder.append(f'<a class="item-left{" hidden" if f.hidden else ""}" href="{html.escape(parse.quote(f.name))}">')
             builder.append('<svg class="item-icon" xmlns="http://www.w3.org/2000/svg" height="20" viewBox="0 -960 960 960" width="20" fill="#76797b"><path d="M320-240h320v-80H320v80Zm0-160h320v-80H320v80ZM240-80q-33 0-56.5-23.5T160-160v-640q0-33 23.5-56.5T240-880h320l240 240v480q0 33-23.5 56.5T720-80H240Zm280-520v-200H240v640h480v-440H520ZM240-800v200-200 640-640Z"/></svg>')
-            builder.append(f'{html.escape(f)}')
+            builder.append(f'{html.escape(f.name)}')
             builder.append('</a>')
             builder.append('<span class="item-right">')
-            builder.append(f'<span class="size">{self._format_size(size)}</span>')
-            builder.append(f'<a class="btn-download" href="{html.escape(parse.quote(f))}" title="Download" download>')
+            builder.append(f'<span class="size">{self._format_size(f.size)}</span>')
+            builder.append(f'<a class="btn-download" href="{html.escape(parse.quote(f.name))}" title="Download" download>')
             builder.append('<svg xmlns="http://www.w3.org/2000/svg" enable-background="new 0 0 24 24" height="20px" viewBox="0 0 24 24" width="20px" fill="#2965c7"><g><path d="M18,15v3H6v-3H4v3c0,1.1,0.9,2,2,2h12c1.1,0,2-0.9,2-2v-3H18z M17,11l-1.41-1.41L13,12.17V4h-2v8.17L8.41,9.59L7,11l5,5 L17,11z"/></g></svg>')
             builder.append('</a>')
             builder.append('</span>')
@@ -526,35 +526,6 @@ window.onload = on_load;
         builder.append('</div>')
         builder.end_body()
         return builder.build()
-
-    def cmp_file(self, e1, e2):
-        s1, hidden1, _ = e1
-        s2, hidden2, _ = e2
-        if hidden1 != hidden2:
-            return hidden2 - hidden1
-        if s1[0] == '.' and s2[0] != '.':
-            return -1
-        if s1[0] != '.' and s2[0] == '.':
-            return 1
-        len1, len2 = len(s1), len(s2)
-        i, min_len = 0, min(len1, len2)
-        while i < min_len:
-            ch1, ch2 = ord(s1[i]), ord(s2[i])
-            if 65 <= ch1 <= 90:
-                ch1 += 32
-            if 65 <= ch2 <= 90:
-                ch2 += 32
-            if 49 <= ch1 <= 57 and 49 <= ch2 <= 57:
-                num1, idx1 = self._check_number(s1, len1, i)
-                num2, idx2 = self._check_number(s2, len2, i)
-                if num1 != num2:
-                    return num1 - num2
-                i = idx1
-            elif ch1 == ch2:
-                i += 1
-            else:
-                return ch1 - ch2
-        return len1 - len2
 
     def _is_from_commandline(self):
         ua = self.headers['User-Agent']
@@ -607,16 +578,6 @@ window.onload = on_load;
     def _is_hidden_unix(self, file_path):
         return os.path.basename(file_path).startswith('.')
 
-    def _check_number(self, s, n, start):
-        num, end = 0, start
-        while end < n:
-            ch = ord(s[end])
-            if ch < 48 or ch > 57:
-                break
-            num = num * 10 + ch - 48
-            end += 1
-        return (num, end)
-
     def _format_size(self, size):
         lst = ((1024, 'KiB'), (1048576, 'MiB'), (1073741824, 'GiB'), (1099511627776, 'TiB'))
         idx = 0
@@ -640,31 +601,24 @@ class FileShareHandler(BaseFileShareHandler):
     def do_get(self):
         try:
             path, _ = self._split_path(self.path)
+            if path == '/':
+                files = sorted(FileItem(os.path.basename(f), self.is_hidden(f), os.path.getsize(f)) for f in self._files)
+                self.respond_ok(self.build_html(path, [], files))
+                return
+            path = path[1:]
+            for f in self._files:
+                if path == os.path.basename(f):
+                    self.respond_for_file(f)
+                    return
+            if path == 'file' and len(self._files) == 1:
+                self.respond_for_file(self._files[0])
+            else:
+                self.respond_not_found()
         except IndexError:
             self.respond_bad_request()
-            return
-        if path == '/':
-            files = []
-            for f in self._files:
-                size = 0
-                try:
-                    size = os.path.getsize(f)
-                except PermissionError:
-                    pass
-                except FileNotFoundError:
-                    continue
-                files.append((os.path.basename(f), self.is_hidden(f), size))
-            files.sort(key=functools.cmp_to_key(self.cmp_file))
-            self.respond_ok(self.build_html(path, [], files))
-            return
-        path = path[1:]
-        for f in self._files:
-            if path == os.path.basename(f):
-                self.respond_for_file(f)
-                return
-        if path == 'file' and len(self._files) == 1:
-            self.respond_for_file(self._files[0])
-        else:
+        except PermissionError:
+            self.respond_forbidden()
+        except FileNotFoundError:
             self.respond_not_found()
 
 
@@ -695,8 +649,6 @@ class DirectoryShareHandler(BaseFileShareHandler):
                 return
             try:
                 dirs, files = self.list_dir(file_path)
-                dirs.sort(key=functools.cmp_to_key(self.cmp_file))
-                files.sort(key=functools.cmp_to_key(self.cmp_file))
             except PermissionError:
                 self.respond_forbidden()
             except FileNotFoundError:
@@ -762,15 +714,15 @@ class DirectoryShareHandler(BaseFileShareHandler):
                         items = [f for f in os.listdir(path) if self._all or not self.is_hidden(f'{path}/{f}')]
                     except Exception:
                         pass
-                    dirs.append((name, hidden, len(items)))
+                    dirs.append(FileItem(name, hidden, len(items)))
                 else:
                     size = 0
                     try:
                         size = os.path.getsize(path)
                     except Exception:
                         pass
-                    files.append((name, hidden, size))
-        return (dirs, files)
+                    files.append(FileItem(name, hidden, size))
+        return (sorted(dirs), sorted(files))
 
     def _archive(self, base_dir, dir, zip):
         if not base_dir.endswith('/'):
@@ -1083,6 +1035,52 @@ class HtmlBuilder:
     def build(self):
         self._list.append('</html>')
         return ''.join(self._list)
+
+
+class FileItem:
+
+    def __init__(self, name, hidden, size):
+        self.name = name
+        self.hidden = hidden
+        self.size = size
+
+    def __lt__(self, other):
+        if self.hidden != other.hidden:
+            return self.hidden
+        name1, name2 = self.name, other.name
+        if name1[0] == '.' and name2[0] != '.':
+            return True
+        if name1[0] != '.' and name2[0] == '.':
+            return False
+        len1, len2 = len(name1), len(name2)
+        i, min_len = 0, min(len1, len2)
+        while i < min_len:
+            ch1, ch2 = ord(name1[i]), ord(name2[i])
+            if 65 <= ch1 <= 90:
+                ch1 += 32
+            if 65 <= ch2 <= 90:
+                ch2 += 32
+            if 49 <= ch1 <= 57 and 49 <= ch2 <= 57:
+                num1, idx1 = self._check_number(name1, len1, i)
+                num2, idx2 = self._check_number(name2, len2, i)
+                if num1 != num2:
+                    return num1 < num2
+                i = idx1
+            elif ch1 == ch2:
+                i += 1
+            else:
+                return ch1 < ch2
+        return len1 < len2
+
+    def _check_number(self, s, n, start):
+        num, end = 0, start
+        while end < n:
+            ch = ord(s[end])
+            if ch < 48 or ch > 57:
+                break
+            num = num * 10 + ch - 48
+            end += 1
+        return (num, end)
 
 
 class MultipartParser:
