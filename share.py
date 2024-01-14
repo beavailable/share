@@ -54,7 +54,7 @@ class BaseHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == '/favicon.ico':
             self.send_response(HTTPStatus.OK)
-            self.send_content_length(len(BaseHandler.ico))
+            self.send_content_length(len(self.ico))
             self.send_content_type('image/x-icon')
             self.end_headers()
             self.wfile.write(self.ico)
