@@ -40,22 +40,28 @@ tls options:
 
 # 提示
 - 如果你只有一个文件需要分享，下面这个简化的 url 可以帮助你快速访问到这个文件：
-    ```
+    ```bash
     http://{host}:{port}/file
     ```
     使用常见的命令行工具下载文件时，会收到`Content-Disposition`首部，因此如果需要保留原始文件名，可以用：
-    ```
+    ```bash
     wget --content-disposition http://{host}:{port}/file
     ```
     或者是：
-    ```
+    ```bash
     curl -OJ http://{host}:{port}/file
     ```
 - 使用 curl 上传文件时，有 POST 和 PUT 两种方式，所以你可以用：
-    ```
+    ```bash
     curl -F file=@/path/to/file http://{host}:{port}
+    # create new folders at the same time
+    curl -F file=@/path/to/file http://{host}:{port}/custom/path
     ```
     或者是：
-    ```
+    ```bash
     curl -T /path/to/file http://{host}:{port}
+    # create new folders at the same time
+    curl -T /path/to/file http://{host}:{port}/custom/path/
+    # with a different filename
+    curl -T /path/to/file http://{host}:{port}/custom/path/custom-filename
     ```
