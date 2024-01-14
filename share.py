@@ -218,7 +218,8 @@ class BaseHandler(BaseHTTPRequestHandler):
         parts = []
         for p in path.split('/'):
             if p == '..':
-                parts.pop()
+                if parts:
+                    parts.pop()
             elif p and p != '.':
                 parts.append(p)
         collapsed_path = '/' + '/'.join(parts)
@@ -599,8 +600,8 @@ class FileShareHandler(BaseFileShareHandler):
         super().__init__(*args, **kwargs)
 
     def do_get(self):
+        path, _ = self._split_path(self.path)
         try:
-            path, _ = self._split_path(self.path)
             if path == '/':
                 files = sorted(FileItem(os.path.basename(f), self.is_hidden(f), os.path.getsize(f)) for f in self._files)
                 self.respond_ok(self.build_html(path, [], files))
@@ -614,8 +615,6 @@ class FileShareHandler(BaseFileShareHandler):
                 self.respond_for_file(self._files[0])
             else:
                 self.respond_not_found()
-        except IndexError:
-            self.respond_bad_request()
         except PermissionError:
             self.respond_forbidden()
         except FileNotFoundError:
@@ -634,11 +633,7 @@ class DirectoryShareHandler(BaseFileShareHandler):
         super().__init__(*args, **kwargs)
 
     def do_get(self):
-        try:
-            path, _ = self._split_path(self.path)
-        except IndexError:
-            self.respond_bad_request()
-            return
+        path, _ = self._split_path(self.path)
         if not self._all and self._contains_hidden_segment(path):
             self.respond_not_found()
             return
@@ -668,22 +663,14 @@ class DirectoryShareHandler(BaseFileShareHandler):
 
     def do_post(self):
         if self._upload:
-            try:
-                path, _ = self._split_path(self.path)
-            except IndexError:
-                self.respond_bad_request()
-                return
+            path, _ = self._split_path(self.path)
             self.handle_multipart(self._dir.rstrip('/') + path, parse.quote(path))
         else:
             super().do_post()
 
     def do_put(self):
         if self._upload:
-            try:
-                path, _ = self._split_path(self.path)
-            except IndexError:
-                self.respond_bad_request()
-                return
+            path, _ = self._split_path(self.path)
             self.handle_putfile(self._dir.rstrip('/') + path)
         else:
             super().do_put()
@@ -855,11 +842,7 @@ window.onload = on_load;
         self.handle_multipart(self._dir, '/')
 
     def do_put(self):
-        try:
-            path, _ = self._split_path(self.path)
-        except IndexError:
-            self.respond_bad_request()
-            return
+        path, _ = self._split_path(self.path)
         self.handle_putfile(self._dir.rstrip('/') + path)
 
 
