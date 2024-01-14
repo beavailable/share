@@ -166,11 +166,16 @@ class BaseHandler(BaseHTTPRequestHandler):
         self.send_response_only(code, message)
 
     def send_error(self, code, message=None, explain=None):
+        if message is None:
+            if code in self.responses:
+                message = self.responses[code][0]
+            else:
+                message = ''
         try:
-            path = parse.unquote(self.path)
+            detail = parse.unquote(self.path)
         except AttributeError:
-            path = ''
-        self.log_error('%s %d %s', self.command if self.command else '???', code, path)
+            detail = message
+        self.log_error('%s %d %s', self.command if self.command else '???', code, detail)
         self.send_response_only(code, message)
         self.send_header('Connection', 'close')
         self.end_headers()
