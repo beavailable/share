@@ -37,7 +37,10 @@ class ShareServer(ThreadingHTTPServer):
         sys.stderr.write(f'{msg}\n')
 
     def _print_error_unix(self, msg):
-        sys.stderr.write(f'\033[33m{msg}\033[0m\n')
+        if sys.stderr.isatty():
+            sys.stderr.write(f'\033[33m{msg}\033[0m\n')
+        else:
+            sys.stderr.write(f'{msg}\n')
 
 
 class BaseHandler(BaseHTTPRequestHandler):
