@@ -534,7 +534,11 @@ window.onload = on_load;
 
     def _guess_type(self, path):
         guess, _ = mimetypes.guess_type(path)
-        return guess if guess else 'text/plain'
+        if not guess:
+            guess = 'text/plain'
+        if guess.startswith('text'):
+            guess = f'{guess}; charset=utf-8'
+        return guess
 
     def _parse_range(self, content_range, filesize):
         if len(content_range) < 8 or content_range[:6] != 'bytes=':
