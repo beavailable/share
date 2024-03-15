@@ -50,7 +50,7 @@ tls options:
     ```bash
     curl -OJ http://{host}:{port}/file
     ```
-- If you wnat to upload files to the sharing server with `curl`, you can use:
+- If you want to upload files to the sharing server with `curl`, you can use:
     ```bash
     curl -F file=@/path/to/file http://{host}:{port}
     # create new folders at the same time
