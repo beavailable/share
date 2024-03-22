@@ -9,7 +9,6 @@ from http import cookies
 from urllib import parse
 import html
 import mimetypes
-import shutil
 import base64
 import time
 import stat
@@ -108,9 +107,6 @@ class BaseHandler(BaseHTTPRequestHandler):
         if not content_length:
             self.respond_bad_request()
             return
-        if not self._has_freespace(content_length):
-            self.respond_internal_server_error()
-            return
         content_type = self.headers['Content-Type']
         if not content_type:
             self.respond_bad_request()
@@ -147,9 +143,6 @@ class BaseHandler(BaseHTTPRequestHandler):
         content_length = self.get_content_length()
         if not content_length:
             self.respond_bad_request()
-            return
-        if not self._has_freespace(content_length):
-            self.respond_internal_server_error()
             return
         try:
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
@@ -208,13 +201,6 @@ class BaseHandler(BaseHTTPRequestHandler):
         builder.append('</div>')
         builder.end_body()
         return builder.build()
-
-    def _has_freespace(self, need_size):
-        path = self._dir
-        if is_windows():
-            path, _ = os.path.splitdrive(path)
-        total, used, free = shutil.disk_usage(path)
-        return free - need_size >= 1073741824
 
     def _parse_boundary(self, content_type):
         parts = content_type.split('; ')
