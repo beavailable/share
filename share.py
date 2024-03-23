@@ -640,11 +640,7 @@ class DirectoryShareHandler(BaseFileShareHandler):
         elif os.path.isfile(file_path):
             self.respond_for_file(file_path)
         elif file_path.endswith('.zip'):
-            file_path = file_path[:-4]
-            if os.path.isdir(file_path):
-                self.respond_for_archive(file_path)
-            else:
-                self.respond_not_found()
+            self.respond_for_archive(file_path[:-4])
         else:
             self.respond_not_found()
 
@@ -662,15 +658,29 @@ class DirectoryShareHandler(BaseFileShareHandler):
         else:
             super().do_put()
 
-    def respond_for_archive(self, dir):
+    def respond_for_archive(self, path):
+        if os.path.isdir(path):
+            is_dir = True
+            compression = zipfile.ZIP_STORED
+            compresslevel = None
+        elif os.path.isfile(path):
+            is_dir = False
+            compression = zipfile.ZIP_DEFLATED
+            compresslevel = 1
+        else:
+            self.respond_not_found()
+            return
         self.send_response(HTTPStatus.OK)
         self.send_content_type('application/zip')
         self.send_transfer_encoding('chunked')
         self.end_headers()
         with ChunkWriter(self.wfile) as writer:
-            with zipfile.ZipFile(writer, 'w', zipfile.ZIP_STORED, strict_timestamps=False) as zip:
+            with zipfile.ZipFile(writer, 'w', compression=compression, compresslevel=compresslevel, strict_timestamps=False) as zip:
                 try:
-                    self._archive(os.path.dirname(dir.rstrip('/')), dir, zip)
+                    if is_dir:
+                        self._archive(os.path.dirname(path.rstrip('/')), path, zip)
+                    else:
+                        zip.write(path, os.path.basename(path))
                 except (PermissionError, FileNotFoundError):
                     pass
 
