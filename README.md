@@ -50,9 +50,12 @@ tls options:
     ```bash
     curl -OJ http://{host}:{port}/file
     ```
-- To download a folder with `curl`, just add `.zip` to the url:
+- To archive a folder or a file with `curl`, just add `.zip` to the url:
     ```bash
-    curl -O http://{host}:{port}/any/folder.zip
+    # without compression
+    curl -O http://{host}:{port}/path/to/folder.zip
+    # with compression
+    curl -O http://{host}:{port}/path/to/file.zip
     ```
 - If you want to upload files to the sharing server with `curl`, you can use:
     ```bash
