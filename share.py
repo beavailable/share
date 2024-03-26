@@ -366,6 +366,7 @@ class BaseFileShareHandler(BaseHandler):
             self._copy_file_range(f, self.wfile, start, content_length)
 
     def respond_for_archive(self, path):
+        include_content_disposition = self._is_from_commandline()
         if os.path.isdir(path):
             is_dir = True
             compression = zipfile.ZIP_STORED
@@ -380,6 +381,8 @@ class BaseFileShareHandler(BaseHandler):
         self.send_response(HTTPStatus.OK)
         self.send_content_type('application/zip')
         self.send_transfer_encoding('chunked')
+        if include_content_disposition:
+            self.send_content_disposition(f'{os.path.basename(path)}.zip')
         self.end_headers()
         with ChunkWriter(self.wfile) as writer:
             with zipfile.ZipFile(writer, 'w', compression=compression, compresslevel=compresslevel, strict_timestamps=False) as zip:
