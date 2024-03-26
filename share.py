@@ -365,6 +365,35 @@ class BaseFileShareHandler(BaseHandler):
             self.end_headers()
             self._copy_file_range(f, self.wfile, start, content_length)
 
+    def respond_for_archive(self, path):
+        if os.path.isdir(path):
+            is_dir = True
+            compression = zipfile.ZIP_STORED
+            compresslevel = None
+        elif os.path.isfile(path):
+            is_dir = False
+            compression = zipfile.ZIP_DEFLATED
+            compresslevel = 1
+        else:
+            self.respond_not_found()
+            return
+        self.send_response(HTTPStatus.OK)
+        self.send_content_type('application/zip')
+        self.send_transfer_encoding('chunked')
+        self.end_headers()
+        with ChunkWriter(self.wfile) as writer:
+            with zipfile.ZipFile(writer, 'w', compression=compression, compresslevel=compresslevel, strict_timestamps=False) as zip:
+                try:
+                    if is_dir:
+                        self.archive_folder(os.path.dirname(path.rstrip('/')), path, zip)
+                    else:
+                        zip.write(path, os.path.basename(path))
+                except (PermissionError, FileNotFoundError):
+                    pass
+
+    def archive_folder(self, base_dir, dir_path, zip):
+        raise NotImplementedError
+
     def build_html(self, path, dirs, files):
         if path == '/':
             title = self._hostname
@@ -598,10 +627,19 @@ class FileShareHandler(BaseFileShareHandler):
                 if path == os.path.basename(f):
                     self.respond_for_file(f)
                     return
-            if path == 'file' and len(self._files) == 1:
+            if len(self._files) == 1 and path == 'file':
                 self.respond_for_file(self._files[0])
-            else:
-                self.respond_not_found()
+                return
+            if path.endswith('.zip'):
+                path = path[:-4]
+                for f in self._files:
+                    if path == os.path.basename(f):
+                        self.respond_for_archive(f)
+                        return
+                if len(self._files) == 1 and path == 'file':
+                    self.respond_for_archive(self._files[0])
+                    return
+            self.respond_not_found()
         except PermissionError:
             self.respond_forbidden()
         except FileNotFoundError:
@@ -658,32 +696,6 @@ class DirectoryShareHandler(BaseFileShareHandler):
         else:
             super().do_put()
 
-    def respond_for_archive(self, path):
-        if os.path.isdir(path):
-            is_dir = True
-            compression = zipfile.ZIP_STORED
-            compresslevel = None
-        elif os.path.isfile(path):
-            is_dir = False
-            compression = zipfile.ZIP_DEFLATED
-            compresslevel = 1
-        else:
-            self.respond_not_found()
-            return
-        self.send_response(HTTPStatus.OK)
-        self.send_content_type('application/zip')
-        self.send_transfer_encoding('chunked')
-        self.end_headers()
-        with ChunkWriter(self.wfile) as writer:
-            with zipfile.ZipFile(writer, 'w', compression=compression, compresslevel=compresslevel, strict_timestamps=False) as zip:
-                try:
-                    if is_dir:
-                        self._archive(os.path.dirname(path.rstrip('/')), path, zip)
-                    else:
-                        zip.write(path, os.path.basename(path))
-                except (PermissionError, FileNotFoundError):
-                    pass
-
     def list_dir(self, dir):
         if not dir.endswith('/'):
             dir = dir + '/'
@@ -708,16 +720,16 @@ class DirectoryShareHandler(BaseFileShareHandler):
                     files.append(FileItem(name, hidden, size))
         return (sorted(dirs), sorted(files))
 
-    def _archive(self, base_dir, dir, zip):
+    def archive_folder(self, base_dir, dir_path, zip):
         if not base_dir.endswith('/'):
-            base_dir = base_dir + '/'
-        if not dir.endswith('/'):
-            dir = dir + '/'
-        for name in os.listdir(dir):
-            path = dir + name
+            base_dir += '/'
+        if not dir_path.endswith('/'):
+            dir_path += '/'
+        for name in os.listdir(dir_path):
+            path = dir_path + name
             if self._all or not self.is_hidden(path):
                 if os.path.isdir(path):
-                    self._archive(base_dir, path, zip)
+                    self.archive_folder(base_dir, path, zip)
                 else:
                     arcname = path[len(base_dir):]
                     try:
