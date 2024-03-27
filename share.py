@@ -759,7 +759,7 @@ class DirectoryShareHandler(BaseFileShareHandler):
             base_dir += '/'
         if not dir_path.endswith('/'):
             dir_path += '/'
-        for name in os.listdir(dir_path):
+        for name in sorted(os.listdir(dir_path)):
             path = dir_path + name
             if self._all or not self.is_hidden(path):
                 if os.path.isdir(path):
