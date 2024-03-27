@@ -15,7 +15,7 @@ import stat
 import re
 import socket
 import ssl
-import zipfile
+import tarfile
 
 
 class ShareServer(ThreadingHTTPServer):
@@ -365,36 +365,39 @@ class BaseFileShareHandler(BaseHandler):
             self.end_headers()
             self._copy_file_range(f, self.wfile, start, content_length)
 
-    def respond_for_archive(self, path):
-        include_content_disposition = self._is_from_commandline()
-        if os.path.isdir(path):
-            is_dir = True
-            compression = zipfile.ZIP_STORED
-            compresslevel = None
-        elif os.path.isfile(path):
-            is_dir = False
-            compression = zipfile.ZIP_DEFLATED
-            compresslevel = 1
-        else:
+    def respond_for_archive(self, path, is_dir, ext):
+        if ext != '.tar' and ext != '.tzst' and ext != '.tar.zst':
             self.respond_not_found()
             return
+        if ext == '.tzst' or ext == '.tar.zst':
+            compress = True
+            try:
+                import zstandard as zstd
+            except ModuleNotFoundError:
+                self.respond_not_found()
+                return
+        else:
+            compress = False
         self.send_response(HTTPStatus.OK)
         self.send_content_type('application/zip')
         self.send_transfer_encoding('chunked')
-        if include_content_disposition:
-            self.send_content_disposition(f'{os.path.basename(path)}.zip')
+        if self._is_from_commandline():
+            self.send_content_disposition(f'{os.path.basename(path)}{ext}')
         self.end_headers()
-        with ChunkWriter(self.wfile) as writer:
-            with zipfile.ZipFile(writer, 'w', compression=compression, compresslevel=compresslevel, strict_timestamps=False) as zip:
+        writer = ChunkWriter(self.wfile)
+        if compress:
+            writer = zstd.ZstdCompressor().stream_writer(writer)
+        with writer:
+            with tarfile.open(None, 'w|', writer, 65536) as tar:
                 try:
                     if is_dir:
-                        self.archive_folder(os.path.dirname(path.rstrip('/')), path, zip)
+                        self.archive_folder(os.path.dirname(path.rstrip('/')), path, tar)
                     else:
-                        zip.write(path, os.path.basename(path))
+                        tar.add(path, os.path.basename(path))
                 except (PermissionError, FileNotFoundError):
                     pass
 
-    def archive_folder(self, base_dir, dir_path, zip):
+    def archive_folder(self, base_dir, dir_path, tar):
         raise NotImplementedError
 
     def build_html(self, path, dirs, files):
@@ -518,7 +521,7 @@ window.onload = on_load;
             builder.append('</a>')
             builder.append('<span class="item-right">')
             builder.append(f'<span class="size">{d.size} {"item" if d.size == 1 else "items"}</span>')
-            builder.append(f'<a class="btn-download" href="{parse.quote(d.name + ".zip")}" title="Package" download>')
+            builder.append(f'<a class="btn-download" href="{parse.quote(d.name + ".tar")}" title="Archive" download>')
             builder.append('<svg xmlns="http://www.w3.org/2000/svg" height="20" width="20" fill="#2965c7"><path d="M4.208 17.5q-.687 0-1.198-.5-.51-.5-.51-1.188V5.438q0-.334.115-.573.114-.24.281-.469L4.062 3q.167-.229.417-.365.25-.135.542-.135h9.958q.292 0 .542.135.25.136.437.365l1.167 1.396q.167.229.271.469.104.239.104.573v10.374q0 .688-.5 1.188t-1.188.5Zm.375-12.438h10.855l-.709-.812H5.292ZM4.25 15.75h11.5V6.812H4.25v8.938ZM10 14.396q.167 0 .333-.073.167-.073.292-.198l2.104-2.104q.25-.25.25-.604 0-.355-.25-.605t-.604-.25q-.354 0-.604.25l-.646.646v-2.5q0-.354-.26-.614-.261-.261-.615-.261t-.615.261q-.26.26-.26.614v2.5l-.646-.646q-.25-.25-.604-.25t-.604.25q-.25.25-.25.605 0 .354.25.604l2.104 2.104q.125.125.292.198.166.073.333.073ZM4.25 15.75V6.812v8.938Z"/></svg>')
             builder.append('</a>')
             builder.append('</span>')
@@ -625,28 +628,41 @@ class FileShareHandler(BaseFileShareHandler):
                 files = sorted(FileItem(os.path.basename(f), self.is_hidden(f), os.path.getsize(f)) for f in self._files)
                 self.respond_ok(self.build_html(path, [], files))
                 return
-            path = path[1:]
-            for f in self._files:
-                if path == os.path.basename(f):
-                    self.respond_for_file(f)
-                    return
-            if len(self._files) == 1 and path == 'file':
+            name = path[1:]
+            f = self._find_file(name)
+            if f:
+                self.respond_for_file(f)
+                return
+            if len(self._files) == 1 and name == 'file':
                 self.respond_for_file(self._files[0])
                 return
-            if path.endswith('.zip'):
-                path = path[:-4]
-                for f in self._files:
-                    if path == os.path.basename(f):
-                        self.respond_for_archive(f)
-                        return
-                if len(self._files) == 1 and path == 'file':
-                    self.respond_for_archive(self._files[0])
-                    return
+            if name.endswith('.tar'):
+                name, ext = name[:-4], name[-4:]
+            elif name.endswith('.tzst'):
+                name, ext = name[:-5], name[-5:]
+            elif name.endswith('.tar.zst'):
+                name, ext = name[:-8], name[-8:]
+            else:
+                self.respond_not_found()
+                return
+            f = self._find_file(name)
+            if f:
+                self.respond_for_archive(f, False, ext)
+                return
+            if len(self._files) == 1 and name == 'file':
+                self.respond_for_archive(self._files[0], False, ext)
+                return
             self.respond_not_found()
         except PermissionError:
             self.respond_forbidden()
         except FileNotFoundError:
             self.respond_not_found()
+
+    def _find_file(self, name):
+        for f in self._files:
+            if os.path.basename(f) == name:
+                return f
+        return None
 
 
 class DirectoryShareHandler(BaseFileShareHandler):
@@ -678,12 +694,27 @@ class DirectoryShareHandler(BaseFileShareHandler):
                 self.respond_not_found()
             else:
                 self.respond_ok(self.build_html(path, dirs, files))
-        elif os.path.isfile(file_path):
+            return
+        if os.path.isfile(file_path):
             self.respond_for_file(file_path)
-        elif file_path.endswith('.zip'):
-            self.respond_for_archive(file_path[:-4])
+            return
+        if file_path.endswith('.tar'):
+            file_path, ext = file_path[:-4], file_path[-4:]
+        elif file_path.endswith('.tzst'):
+            file_path, ext = file_path[:-5], file_path[-5:]
+        elif file_path.endswith('.tar.zst'):
+            file_path, ext = file_path[:-8], file_path[-8:]
         else:
             self.respond_not_found()
+            return
+        if os.path.isdir(file_path):
+            is_dir = True
+        elif os.path.isfile(file_path):
+            is_dir = False
+        else:
+            self.respond_not_found()
+            return
+        self.respond_for_archive(file_path, is_dir, ext)
 
     def do_post(self):
         if self._upload:
@@ -723,7 +754,7 @@ class DirectoryShareHandler(BaseFileShareHandler):
                     files.append(FileItem(name, hidden, size))
         return (sorted(dirs), sorted(files))
 
-    def archive_folder(self, base_dir, dir_path, zip):
+    def archive_folder(self, base_dir, dir_path, tar):
         if not base_dir.endswith('/'):
             base_dir += '/'
         if not dir_path.endswith('/'):
@@ -732,11 +763,11 @@ class DirectoryShareHandler(BaseFileShareHandler):
             path = dir_path + name
             if self._all or not self.is_hidden(path):
                 if os.path.isdir(path):
-                    self.archive_folder(base_dir, path, zip)
+                    self.archive_folder(base_dir, path, tar)
                 else:
                     arcname = path[len(base_dir):]
                     try:
-                        zip.write(path, arcname)
+                        tar.add(path, arcname, False)
                     except (PermissionError, FileNotFoundError):
                         pass
 
@@ -1193,11 +1224,14 @@ class ChunkWriter:
     def flush(self):
         self._stream.flush()
 
+    def close(self):
+        self._stream.write(b'0\r\n\r\n')
+
     def __enter__(self):
         return self
 
     def __exit__(self, *exc):
-        self._stream.write(b'0\r\n\r\n')
+        self.close()
 
 
 def get_best_family(host, port):
