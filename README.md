@@ -52,7 +52,7 @@ tls options:
     ```
 - To download an archive of a folder or a file with `curl`, you can add one of the following extensions to the url:
     - `.tar` without compression
-    - `.tzst` or `.tar.zst` with compression (require `python3-zstandard` library)
+    - `.tzst` or `.tar.zst` with compression (require [python3-zstandard](https://github.com/indygreg/python-zstandard) library)
 - If you want to upload files to the sharing server with `curl`, you can use:
     ```bash
     curl -F file=@/path/to/file http://{host}:{port}
