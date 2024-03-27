@@ -1212,6 +1212,7 @@ class ChunkWriter:
 
     def __init__(self, stream):
         self._stream = stream
+        self._closed = False
 
     def write(self, data):
         if not data:
@@ -1225,6 +1226,9 @@ class ChunkWriter:
         self._stream.flush()
 
     def close(self):
+        if self._closed:
+            return
+        self._closed = True
         self._stream.write(b'0\r\n\r\n')
 
     def __enter__(self):
