@@ -51,7 +51,18 @@ class BaseHandler(BaseHTTPRequestHandler):
     def __init__(self, *args, password=None):
         self._hostname = socket.gethostname()
         self._password = password
+        self._compressor = None
         super().__init__(*args)
+
+    def init_compressor(self):
+        if self._compressor:
+            return True
+        try:
+            import zstandard as zstd
+            self._compressor = zstd.ZstdCompressor()
+            return True
+        except ModuleNotFoundError:
+            return False
 
     def do_GET(self):
         if self.path == '/favicon.ico':
@@ -101,6 +112,12 @@ class BaseHandler(BaseHTTPRequestHandler):
         if not content_length or not content_length.isdecimal():
             return None
         return int(content_length)
+
+    def get_accept_encoding(self):
+        accept_encoding = self.headers['Accept-Encoding']
+        if not accept_encoding:
+            return []
+        return accept_encoding.split(', ')
 
     def handle_multipart(self, save_dir, redirect_location):
         content_length = self.get_content_length()
@@ -250,6 +267,9 @@ class BaseHandler(BaseHTTPRequestHandler):
     def send_content_range(self, start, end, filesize):
         self.send_header('Content-Range', f'bytes {start}-{end}/{filesize}')
 
+    def send_content_encoding(self, encoding):
+        self.send_header('Content-Encoding', encoding)
+
     def send_content_disposition(self, filename):
         filename = parse.quote(filename)
         self.send_header('Content-Disposition', f'attachment;filename="{filename}"')
@@ -261,7 +281,12 @@ class BaseHandler(BaseHTTPRequestHandler):
         self.send_response(HTTPStatus.OK)
         if html:
             response = html.encode()
-            self.send_content_length(len(response))
+            l = len(response)
+            if l >= 1024 and 'zstd' in self.get_accept_encoding() and self.init_compressor():
+                response = self._compressor.compress(response)
+                l = len(response)
+                self.send_content_encoding('zstd')
+            self.send_content_length(l)
             self.send_content_type('text/html; charset=utf-8')
             self.end_headers()
             self.wfile.write(response)
@@ -318,22 +343,11 @@ class BaseFileShareHandler(BaseHandler):
     def __init__(self, *args, upload=False, **kwargs):
         self._upload = upload
         self._ua_prefixes = {'curl', 'Wget', 'wget2', 'aria2', 'Axel'}
-        self._compressor = None
         if is_windows():
             self.is_hidden = self._is_hidden_windows
         else:
             self.is_hidden = self._is_hidden_unix
         super().__init__(*args, **kwargs)
-
-    def init_compressor(self):
-        if self._compressor:
-            return True
-        try:
-            import zstandard as zstd
-            self._compressor = zstd.ZstdCompressor()
-            return True
-        except ModuleNotFoundError:
-            return False
 
     def do_get(self):
         path, _ = self._split_path(self.path)
@@ -395,31 +409,40 @@ class BaseFileShareHandler(BaseHandler):
             filesize = os.path.getsize(file)
             content_type = self._guess_type(file)
             content_range = self.headers['Range']
-            if filesize == 0 or not content_range:
-                self.send_response(HTTPStatus.OK)
-                self.send_content_length(filesize)
-                self.send_content_type(content_type)
-                self.send_accept_ranges()
-                if include_content_disposition:
-                    self.send_content_disposition(filename)
-                self.end_headers()
-                self._copy_file(f, self.wfile)
-                return
-            content_range = self._parse_range(content_range, filesize)
-            if not content_range:
-                self.respond_range_not_satisfiable()
-                return
-            start, end = content_range
-            content_length = end - start + 1
-            self.send_response(HTTPStatus.PARTIAL_CONTENT)
-            self.send_content_length(content_length)
+            if content_range:
+                content_range = self._parse_range(content_range, filesize)
+                if not content_range:
+                    self.respond_range_not_satisfiable()
+                    return
+                start, end = content_range
+                content_length = end - start + 1
+                status = HTTPStatus.PARTIAL_CONTENT
+            else:
+                start = 0
+                content_length = filesize
+                status = HTTPStatus.OK
+            if content_length >= 1024 and content_type.startswith('text/') and 'zstd' in self.get_accept_encoding() and self.init_compressor():
+                compress = True
+            else:
+                compress = False
+            self.send_response(status)
+            if compress:
+                self.send_content_encoding('zstd')
+                self.send_transfer_encoding('chunked')
+            else:
+                self.send_content_length(content_length)
             self.send_content_type(content_type)
             self.send_accept_ranges()
-            self.send_content_range(start, end, filesize)
+            if status == HTTPStatus.PARTIAL_CONTENT:
+                self.send_content_range(start, end, filesize)
             if include_content_disposition:
                 self.send_content_disposition(filename)
             self.end_headers()
-            self._copy_file_range(f, self.wfile, start, content_length)
+            if compress:
+                with self._compressor.stream_writer(ChunkWriter(self.wfile)) as writer:
+                    self._copy_file(f, writer, start, content_length)
+            else:
+                self._copy_file(f, self.wfile, start, content_length)
 
     def respond_for_archive(self, full_path, ext):
         if ext != '.tar' and ext != '.tzst' and ext != '.tar.zst':
@@ -632,15 +655,9 @@ window.onload = on_load;
             return None
         return (start, end)
 
-    def _copy_file(self, src, dest):
-        while True:
-            data = src.read(65536)
-            if not data:
-                return
-            dest.write(data)
-
-    def _copy_file_range(self, src, dest, start, length):
-        src.seek(start)
+    def _copy_file(self, src, dest, start, length):
+        if start:
+            src.seek(start)
         while length:
             l = min(length, 65536)
             dest.write(src.read(l))
