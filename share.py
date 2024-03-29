@@ -324,6 +324,42 @@ class BaseFileShareHandler(BaseHandler):
             self.is_hidden = self._is_hidden_unix
         super().__init__(*args, **kwargs)
 
+    def do_get(self):
+        path, _ = self._split_path(self.path)
+        if not self.is_url_valid(path):
+            self.respond_not_found()
+            return
+        redirect_url = self.get_redirect_url(path)
+        if redirect_url:
+            self.respond_redirect(redirect_url)
+            return
+        try:
+            info = self.list_dir(path)
+        except PermissionError:
+            self.respond_forbidden()
+            return
+        except FileNotFoundError:
+            self.respond_not_found()
+            return
+        if info:
+            self.respond_ok(self.build_html(path, *info))
+            return
+        file_path = self.get_file(path)
+        if file_path:
+            self.respond_for_file(file_path)
+            return
+        info = self.get_archive(path)
+        if info:
+            self.respond_for_archive(*info)
+            return
+        self.respond_not_found()
+
+    def is_url_valid(self, path):
+        return True
+
+    def get_redirect_url(self, path):
+        return None
+
     def respond_for_file(self, file):
         include_content_disposition = self._is_from_commandline()
         try:
@@ -365,7 +401,7 @@ class BaseFileShareHandler(BaseHandler):
             self.end_headers()
             self._copy_file_range(f, self.wfile, start, content_length)
 
-    def respond_for_archive(self, path, is_dir, ext):
+    def respond_for_archive(self, full_path, ext):
         if ext != '.tar' and ext != '.tzst' and ext != '.tar.zst':
             self.respond_not_found()
             return
@@ -382,7 +418,7 @@ class BaseFileShareHandler(BaseHandler):
         self.send_content_type('application/zip')
         self.send_transfer_encoding('chunked')
         if self._is_from_commandline():
-            self.send_content_disposition(f'{os.path.basename(path)}{ext}')
+            self.send_content_disposition(f'{os.path.basename(full_path)}{ext}')
         self.end_headers()
         writer = ChunkWriter(self.wfile)
         if compress:
@@ -390,10 +426,10 @@ class BaseFileShareHandler(BaseHandler):
         with writer:
             with tarfile.open(None, 'w|', writer, 65536) as tar:
                 try:
-                    if is_dir:
-                        self.archive_folder(os.path.dirname(path.rstrip('/')), path, tar)
+                    if os.path.isdir(full_path):
+                        self.archive_folder(os.path.dirname(full_path.rstrip('/')), full_path, tar)
                     else:
-                        tar.add(path, os.path.basename(path))
+                        tar.add(full_path, os.path.basename(full_path))
                 except (PermissionError, FileNotFoundError):
                     pass
 
@@ -621,42 +657,37 @@ class FileShareHandler(BaseFileShareHandler):
         self._files = files
         super().__init__(*args, **kwargs)
 
-    def do_get(self):
-        path, _ = self._split_path(self.path)
-        try:
-            if path == '/':
-                files = sorted(FileItem(os.path.basename(f), self.is_hidden(f), os.path.getsize(f)) for f in self._files)
-                self.respond_ok(self.build_html(path, [], files))
-                return
-            name = path[1:]
-            f = self._find_file(name)
-            if f:
-                self.respond_for_file(f)
-                return
-            if len(self._files) == 1 and name == 'file':
-                self.respond_for_file(self._files[0])
-                return
-            if name.endswith('.tar'):
-                name, ext = name[:-4], name[-4:]
-            elif name.endswith('.tzst'):
-                name, ext = name[:-5], name[-5:]
-            elif name.endswith('.tar.zst'):
-                name, ext = name[:-8], name[-8:]
-            else:
-                self.respond_not_found()
-                return
-            f = self._find_file(name)
-            if f:
-                self.respond_for_archive(f, False, ext)
-                return
-            if len(self._files) == 1 and name == 'file':
-                self.respond_for_archive(self._files[0], False, ext)
-                return
-            self.respond_not_found()
-        except PermissionError:
-            self.respond_forbidden()
-        except FileNotFoundError:
-            self.respond_not_found()
+    def list_dir(self, path):
+        if path != '/':
+            return None
+        dirs, files = [], sorted(FileItem(os.path.basename(f), self.is_hidden(f), os.path.getsize(f)) for f in self._files)
+        return (dirs, files)
+
+    def get_file(self, path):
+        name = path[1:]
+        f = self._find_file(name)
+        if f:
+            return f
+        if len(self._files) == 1 and name == 'file':
+            return self._files[0]
+        return None
+
+    def get_archive(self, path):
+        name = path[1:]
+        if name.endswith('.tar'):
+            name, ext = name[:-4], name[-4:]
+        elif name.endswith('.tzst'):
+            name, ext = name[:-5], name[-5:]
+        elif name.endswith('.tar.zst'):
+            name, ext = name[:-8], name[-8:]
+        else:
+            return None
+        f = self._find_file(name)
+        if f:
+            return (f, ext)
+        if len(self._files) == 1 and name == 'file':
+            return (self._files[0], ext)
+        return None
 
     def _find_file(self, name):
         for f in self._files:
@@ -676,28 +707,50 @@ class DirectoryShareHandler(BaseFileShareHandler):
             self._contains_hidden_segment = self._contains_hidden_segment_unix
         super().__init__(*args, **kwargs)
 
-    def do_get(self):
-        path, _ = self._split_path(self.path)
-        if not self._all and self._contains_hidden_segment(path):
-            self.respond_not_found()
-            return
+    def is_url_valid(self, path):
+        return self._all or not self._contains_hidden_segment(path)
+
+    def get_redirect_url(self, path):
+        full_path = self._dir.rstrip('/') + path
+        if os.path.isdir(full_path) and not path.endswith('/'):
+            return path + '/'
+        return None
+
+    def list_dir(self, path):
+        dir_path = self._dir.rstrip('/') + path
+        if not os.path.isdir(dir_path):
+            return None
+        if not dir_path.endswith('/'):
+            dir_path = dir_path + '/'
+        dirs, files = [], []
+        for name in os.listdir(dir_path):
+            full_path = dir_path + name
+            hidden = self.is_hidden(full_path)
+            if self._all or not hidden:
+                if os.path.isdir(full_path):
+                    items = []
+                    try:
+                        items = [f for f in os.listdir(full_path) if self._all or not self.is_hidden(f'{full_path}/{f}')]
+                    except Exception:
+                        pass
+                    dirs.append(FileItem(name, hidden, len(items)))
+                else:
+                    size = 0
+                    try:
+                        size = os.path.getsize(full_path)
+                    except Exception:
+                        pass
+                    files.append(FileItem(name, hidden, size))
+        return (sorted(dirs), sorted(files))
+
+    def get_file(self, path):
         file_path = self._dir.rstrip('/') + path
-        if os.path.isdir(file_path):
-            if not path.endswith('/'):
-                self.respond_redirect(path + '/')
-                return
-            try:
-                dirs, files = self.list_dir(file_path)
-            except PermissionError:
-                self.respond_forbidden()
-            except FileNotFoundError:
-                self.respond_not_found()
-            else:
-                self.respond_ok(self.build_html(path, dirs, files))
-            return
         if os.path.isfile(file_path):
-            self.respond_for_file(file_path)
-            return
+            return file_path
+        return None
+
+    def get_archive(self, path):
+        file_path = self._dir.rstrip('/') + path
         if file_path.endswith('.tar'):
             file_path, ext = file_path[:-4], file_path[-4:]
         elif file_path.endswith('.tzst'):
@@ -705,16 +758,10 @@ class DirectoryShareHandler(BaseFileShareHandler):
         elif file_path.endswith('.tar.zst'):
             file_path, ext = file_path[:-8], file_path[-8:]
         else:
-            self.respond_not_found()
-            return
-        if os.path.isdir(file_path):
-            is_dir = True
-        elif os.path.isfile(file_path):
-            is_dir = False
-        else:
-            self.respond_not_found()
-            return
-        self.respond_for_archive(file_path, is_dir, ext)
+            return None
+        if os.path.exists(file_path):
+            return (file_path, ext)
+        return None
 
     def do_post(self):
         if self._upload:
@@ -729,30 +776,6 @@ class DirectoryShareHandler(BaseFileShareHandler):
             self.handle_putfile(self._dir.rstrip('/') + path)
         else:
             super().do_put()
-
-    def list_dir(self, dir):
-        if not dir.endswith('/'):
-            dir = dir + '/'
-        dirs, files = [], []
-        for name in os.listdir(dir):
-            path = dir + name
-            hidden = self.is_hidden(path)
-            if self._all or not hidden:
-                if os.path.isdir(path):
-                    items = []
-                    try:
-                        items = [f for f in os.listdir(path) if self._all or not self.is_hidden(f'{path}/{f}')]
-                    except Exception:
-                        pass
-                    dirs.append(FileItem(name, hidden, len(items)))
-                else:
-                    size = 0
-                    try:
-                        size = os.path.getsize(path)
-                    except Exception:
-                        pass
-                    files.append(FileItem(name, hidden, size))
-        return (sorted(dirs), sorted(files))
 
     def archive_folder(self, base_dir, dir_path, tar):
         if not base_dir.endswith('/'):
