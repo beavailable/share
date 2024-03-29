@@ -360,6 +360,15 @@ class BaseFileShareHandler(BaseHandler):
     def get_redirect_url(self, path):
         return None
 
+    def list_dir(self, path):
+        return None
+
+    def get_file(self, path):
+        return None
+
+    def get_archive(self, path):
+        return None
+
     def respond_for_file(self, file):
         include_content_disposition = self._is_from_commandline()
         try:
