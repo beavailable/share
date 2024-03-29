@@ -318,11 +318,22 @@ class BaseFileShareHandler(BaseHandler):
     def __init__(self, *args, upload=False, **kwargs):
         self._upload = upload
         self._ua_prefixes = {'curl', 'Wget', 'wget2', 'aria2', 'Axel'}
+        self._compressor = None
         if is_windows():
             self.is_hidden = self._is_hidden_windows
         else:
             self.is_hidden = self._is_hidden_unix
         super().__init__(*args, **kwargs)
+
+    def init_compressor(self):
+        if self._compressor:
+            return True
+        try:
+            import zstandard as zstd
+            self._compressor = zstd.ZstdCompressor()
+            return True
+        except ModuleNotFoundError:
+            return False
 
     def do_get(self):
         path, _ = self._split_path(self.path)
@@ -416,9 +427,7 @@ class BaseFileShareHandler(BaseHandler):
             return
         if ext == '.tzst' or ext == '.tar.zst':
             compress = True
-            try:
-                import zstandard as zstd
-            except ModuleNotFoundError:
+            if not self.init_compressor():
                 self.respond_not_found()
                 return
         else:
@@ -431,7 +440,7 @@ class BaseFileShareHandler(BaseHandler):
         self.end_headers()
         writer = ChunkWriter(self.wfile)
         if compress:
-            writer = zstd.ZstdCompressor().stream_writer(writer)
+            writer = self._compressor.stream_writer(writer)
         with writer:
             with tarfile.open(None, 'w|', writer, 65536) as tar:
                 try:
