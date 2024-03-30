@@ -398,7 +398,6 @@ class BaseFileShareHandler(BaseHandler):
             filename = os.path.basename(file)
             filesize = os.path.getsize(file)
             content_type = self._guess_type(file)
-            accept_ranges = 'bytes'
             request_range = self.headers['Range']
             if request_range:
                 request_range = self._parse_range(request_range, filesize)
@@ -414,15 +413,17 @@ class BaseFileShareHandler(BaseHandler):
                 content_length = filesize
                 status = HTTPStatus.OK
                 content_range = None
-            if content_length >= 1024 and content_type.startswith('text/') and 'zstd' in self.get_accept_encoding() and self.init_compressor():
+            if status == HTTPStatus.OK and content_length >= 1024 and content_type.startswith('text/') and 'zstd' in self.get_accept_encoding() and self.init_compressor():
                 compress = True
                 content_length = None
                 transfer_encoding = 'chunked'
                 content_encoding = 'zstd'
+                accept_ranges = None
             else:
                 compress = False
                 transfer_encoding = None
                 content_encoding = None
+                accept_ranges = 'bytes'
             if self._is_from_commandline():
                 content_disposition = f'attachment; filename="{parse.quote(filename)}"'
             else:
@@ -430,7 +431,7 @@ class BaseFileShareHandler(BaseHandler):
             self.respond(status, content_type=content_type, content_length=content_length, transfer_encoding=transfer_encoding, content_encoding=content_encoding, accept_ranges=accept_ranges, content_range=content_range, content_disposition=content_disposition)
             if compress:
                 with self._compressor.stream_writer(ChunkWriter(self.wfile)) as writer:
-                    self._copy_file(f, writer, start, content_length)
+                    self._copy_file(f, writer, start, filesize)
             else:
                 self._copy_file(f, self.wfile, start, content_length)
 
