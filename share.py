@@ -433,14 +433,16 @@ class BaseFileShareHandler(BaseHandler):
                 self.respond_not_found()
                 return
             compress = True
+            content_type = 'application/zstd'
         else:
             compress = False
+            content_type = 'application/x-tar'
         if self._is_from_commandline():
             filename = f'{os.path.basename(full_path)}{ext}'
             content_disposition = f'attachment; filename="{parse.quote(filename)}"'
         else:
             content_disposition = None
-        self.respond(HTTPStatus.OK, content_type='application/zip', transfer_encoding='chunked', content_disposition=content_disposition)
+        self.respond(HTTPStatus.OK, content_type=content_type, transfer_encoding='chunked', content_disposition=content_disposition)
         writer = ChunkWriter(self.wfile)
         if compress:
             writer = self._compressor.stream_writer(writer)
