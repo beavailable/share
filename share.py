@@ -386,6 +386,24 @@ class BaseFileShareHandler(BaseHandler):
         return None
 
     def respond_for_file(self, file):
+        filename = os.path.basename(file)
+        filesize = os.path.getsize(file)
+        content_type = self._guess_type(file)
+        request_range = self.headers['Range']
+        if request_range:
+            request_range = self._parse_range(request_range, filesize)
+            if not request_range:
+                self.respond_range_not_satisfiable()
+                return
+            start, end = request_range
+            content_length = end - start + 1
+            status = HTTPStatus.PARTIAL_CONTENT
+            content_range = f'bytes {start}-{end}/{filesize}'
+        else:
+            start = 0
+            content_length = filesize
+            status = HTTPStatus.OK
+            content_range = None
         try:
             f = open(file, 'rb')
         except PermissionError:
@@ -395,24 +413,6 @@ class BaseFileShareHandler(BaseHandler):
             self.respond_not_found()
             return
         with f:
-            filename = os.path.basename(file)
-            filesize = os.path.getsize(file)
-            content_type = self._guess_type(file)
-            request_range = self.headers['Range']
-            if request_range:
-                request_range = self._parse_range(request_range, filesize)
-                if not request_range:
-                    self.respond_range_not_satisfiable()
-                    return
-                start, end = request_range
-                content_length = end - start + 1
-                status = HTTPStatus.PARTIAL_CONTENT
-                content_range = f'bytes {start}-{end}/{filesize}'
-            else:
-                start = 0
-                content_length = filesize
-                status = HTTPStatus.OK
-                content_range = None
             if status == HTTPStatus.OK and content_length >= 1024 and content_type.startswith('text/') and 'zstd' in self.get_accept_encoding() and self.init_compressor():
                 compress = True
                 content_length = None
@@ -429,11 +429,15 @@ class BaseFileShareHandler(BaseHandler):
             else:
                 content_disposition = None
             self.respond(status, content_type=content_type, content_length=content_length, transfer_encoding=transfer_encoding, content_encoding=content_encoding, accept_ranges=accept_ranges, content_range=content_range, content_disposition=content_disposition)
+            if start:
+                f.seek(start)
             if compress:
-                with self._compressor.stream_writer(ChunkWriter(self.wfile)) as writer:
-                    self._copy_file(f, writer, start, filesize)
+                self._compressor.copy_stream(f, ChunkWriter(self.wfile), filesize, read_size=65536, write_size=65544)
             else:
-                self._copy_file(f, self.wfile, start, content_length)
+                while content_length:
+                    l = min(content_length, 65536)
+                    self.wfile.write(f.read(l))
+                    content_length -= l
 
     def respond_for_archive(self, full_path, ext):
         if ext != '.tar' and ext != '.tzst' and ext != '.tar.zst':
@@ -456,7 +460,7 @@ class BaseFileShareHandler(BaseHandler):
         self.respond(HTTPStatus.OK, content_type=content_type, transfer_encoding='chunked', content_disposition=content_disposition)
         writer = ChunkWriter(self.wfile)
         if compress:
-            writer = self._compressor.stream_writer(writer)
+            writer = self._compressor.stream_writer(writer, write_size=65544)
         with writer:
             with tarfile.open(None, 'w|', writer, 65536) as tar:
                 try:
@@ -647,14 +651,6 @@ window.onload = on_load;
         if start > end or end >= filesize:
             return None
         return (start, end)
-
-    def _copy_file(self, src, dest, start, length):
-        if start:
-            src.seek(start)
-        while length:
-            l = min(length, 65536)
-            dest.write(src.read(l))
-            length -= l
 
     def _is_hidden_windows(self, file_path):
         try:
