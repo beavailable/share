@@ -83,8 +83,11 @@ class BaseHandler(BaseHTTPRequestHandler):
             return
         data = self.rfile.read(content_length).decode()
         data = parse.unquote_plus(data)
-        if data == f'password={self._password}':
+        password, _, remember_device = data.partition('&')
+        if password == f'password={self._password}':
             cookie = f'password={parse.quote_plus(self._password)}; path=/'
+            if remember_device == 'remember_device=on':
+                cookie += '; max-age=31536000'
         else:
             cookie = None
         self.respond_redirect(self.path, cookie)
@@ -204,13 +207,20 @@ class BaseHandler(BaseHTTPRequestHandler):
         builder.end_title()
         builder.start_style()
         builder.append('.container{height: 80%; display: flex; align-items: center; justify-content: center;}')
+        builder.append('.password{margin-top: 4px; margin-bottom: 12px; line-height: 24px;}')
+        builder.append('.submit{width: 100%; height: 32px; margin-top: 24px;}')
         builder.end_style()
         builder.end_head()
         builder.start_body()
         builder.append('<div class="container">')
         builder.append(f'<form action="{self.path}" method="post">')
-        builder.append('<input name="password" type="password" placeholder="Enter your password" minlength="3" required autofocus>')
-        builder.append('&nbsp<input type="submit">')
+        builder.append('<label style="display: block;" for="password">Password:</label>')
+        builder.append('<input class="password" id="password" name="password" type="password" minlength="3" required autofocus>')
+        builder.append('<div>')
+        builder.append('<input id="remember_device" name="remember_device" type="checkbox">')
+        builder.append('<label for="remember_device">&nbsp;Remember device</label>')
+        builder.append('</div>')
+        builder.append('<input class="submit" type="submit" value="Continue">')
         builder.append('</form>')
         builder.append('</div>')
         builder.end_body()
