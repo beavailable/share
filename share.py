@@ -66,11 +66,7 @@ class BaseHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == '/favicon.ico':
-            self.send_response(HTTPStatus.OK)
-            self.send_content_length(len(self.ico))
-            self.send_content_type('image/x-icon')
-            self.end_headers()
-            self.wfile.write(self.ico)
+            self.respond_ok(self.ico, content_type='image/x-icon')
             return
         if not self._password or self._validate_password():
             self.do_get()
@@ -87,10 +83,11 @@ class BaseHandler(BaseHTTPRequestHandler):
             return
         data = self.rfile.read(content_length).decode()
         data = parse.unquote_plus(data)
-        if data != f'password={self._password}':
-            self.respond_redirect(self.path)
-            return
-        self.respond_redirect_cookie(self.path, f'password={parse.quote_plus(self._password)}; path=/')
+        if data == f'password={self._password}':
+            cookie = f'password={parse.quote_plus(self._password)}; path=/'
+        else:
+            cookie = None
+        self.respond_redirect(self.path, cookie)
 
     def do_PUT(self):
         if not self._password or self._validate_password():
@@ -117,7 +114,7 @@ class BaseHandler(BaseHTTPRequestHandler):
         accept_encoding = self.headers['Accept-Encoding']
         if not accept_encoding:
             return []
-        return accept_encoding.split(', ')
+        return set(accept_encoding.split(', '))
 
     def handle_multipart(self, save_dir, redirect_location):
         content_length = self.get_content_length()
@@ -249,62 +246,46 @@ class BaseHandler(BaseHTTPRequestHandler):
             collapsed_path += '/'
         return (collapsed_path, query)
 
-    def send_content_length(self, content_length):
-        self.send_header('Content-Length', str(content_length))
-
-    def send_content_type(self, content_type):
-        self.send_header('Content-Type', content_type)
-
-    def send_transfer_encoding(self, encoding):
-        self.send_header('Transfer-Encoding', encoding)
-
-    def send_location(self, location):
-        self.send_header('Location', location)
-
-    def send_accept_ranges(self):
-        self.send_header('Accept-Ranges', 'bytes')
-
-    def send_content_range(self, start, end, filesize):
-        self.send_header('Content-Range', f'bytes {start}-{end}/{filesize}')
-
-    def send_content_encoding(self, encoding):
-        self.send_header('Content-Encoding', encoding)
-
-    def send_content_disposition(self, filename):
-        filename = parse.quote(filename)
-        self.send_header('Content-Disposition', f'attachment;filename="{filename}"')
-
-    def send_cookie(self, cookie):
-        self.send_header('Set-Cookie', cookie)
-
-    def respond_ok(self, html=None):
-        self.send_response(HTTPStatus.OK)
-        if html:
-            response = html.encode()
-            l = len(response)
-            if l >= 1024 and 'zstd' in self.get_accept_encoding() and self.init_compressor():
-                response = self._compressor.compress(response)
-                l = len(response)
-                self.send_content_encoding('zstd')
-            self.send_content_length(l)
-            self.send_content_type('text/html; charset=utf-8')
-            self.end_headers()
-            self.wfile.write(response)
-        else:
-            self.send_content_length(0)
-            self.end_headers()
-
-    def respond_redirect(self, location):
-        self.send_response(HTTPStatus.SEE_OTHER)
-        self.send_content_length(0)
-        self.send_location(location)
+    def respond(self, status, *, content_type=None, content_length=None, transfer_encoding=None, content_encoding=None, accept_ranges=None, content_range=None, content_disposition=None):
+        self.send_response(status)
+        if content_type is not None:
+            self.send_header('Content-Type', content_type)
+        if content_length is not None:
+            self.send_header('Content-Length', content_length)
+        if transfer_encoding is not None:
+            self.send_header('Transfer-Encoding', transfer_encoding)
+        if content_encoding is not None:
+            self.send_header('Content-Encoding', content_encoding)
+        if accept_ranges is not None:
+            self.send_header('Accept-Ranges', accept_ranges)
+        if content_range is not None:
+            self.send_header('Content-Range', content_range)
+        if content_disposition is not None:
+            self.send_header('Content-Disposition', content_disposition)
         self.end_headers()
 
-    def respond_redirect_cookie(self, location, cookie):
+    def respond_ok(self, body=None, *, content_type='text/html; charset=utf-8'):
+        self.send_response(HTTPStatus.OK)
+        if body:
+            self.send_header('Content-Type', content_type)
+            l = len(body)
+            if l >= 1024 and 'zstd' in self.get_accept_encoding() and self.init_compressor():
+                body = self._compressor.compress(body)
+                l = len(body)
+                self.send_header('Content-Encoding', 'zstd')
+            self.send_header('Content-Length', l)
+            self.end_headers()
+            self.wfile.write(body)
+        else:
+            self.send_header('Content-Length', '0')
+            self.end_headers()
+
+    def respond_redirect(self, location, cookie=None):
         self.send_response(HTTPStatus.SEE_OTHER)
-        self.send_content_length(0)
-        self.send_location(location)
-        self.send_cookie(cookie)
+        self.send_header('Content-Length', '0')
+        self.send_header('Location', location)
+        if cookie:
+            self.send_header('Set-Cookie', cookie)
         self.end_headers()
 
     def respond_range_not_satisfiable(self):
@@ -395,7 +376,6 @@ class BaseFileShareHandler(BaseHandler):
         return None
 
     def respond_for_file(self, file):
-        include_content_disposition = self._is_from_commandline()
         try:
             f = open(file, 'rb')
         except PermissionError:
@@ -408,36 +388,36 @@ class BaseFileShareHandler(BaseHandler):
             filename = os.path.basename(file)
             filesize = os.path.getsize(file)
             content_type = self._guess_type(file)
-            content_range = self.headers['Range']
-            if content_range:
-                content_range = self._parse_range(content_range, filesize)
-                if not content_range:
+            accept_ranges = 'bytes'
+            request_range = self.headers['Range']
+            if request_range:
+                request_range = self._parse_range(request_range, filesize)
+                if not request_range:
                     self.respond_range_not_satisfiable()
                     return
-                start, end = content_range
+                start, end = request_range
                 content_length = end - start + 1
                 status = HTTPStatus.PARTIAL_CONTENT
+                content_range = f'bytes {start}-{end}/{filesize}'
             else:
                 start = 0
                 content_length = filesize
                 status = HTTPStatus.OK
+                content_range = None
             if content_length >= 1024 and content_type.startswith('text/') and 'zstd' in self.get_accept_encoding() and self.init_compressor():
                 compress = True
+                content_length = None
+                transfer_encoding = 'chunked'
+                content_encoding = 'zstd'
             else:
                 compress = False
-            self.send_response(status)
-            if compress:
-                self.send_content_encoding('zstd')
-                self.send_transfer_encoding('chunked')
+                transfer_encoding = None
+                content_encoding = None
+            if self._is_from_commandline():
+                content_disposition = f'attachment; filename="{parse.quote(filename)}"'
             else:
-                self.send_content_length(content_length)
-            self.send_content_type(content_type)
-            self.send_accept_ranges()
-            if status == HTTPStatus.PARTIAL_CONTENT:
-                self.send_content_range(start, end, filesize)
-            if include_content_disposition:
-                self.send_content_disposition(filename)
-            self.end_headers()
+                content_disposition = None
+            self.respond(status, content_type=content_type, content_length=content_length, transfer_encoding=transfer_encoding, content_encoding=content_encoding, accept_ranges=accept_ranges, content_range=content_range, content_disposition=content_disposition)
             if compress:
                 with self._compressor.stream_writer(ChunkWriter(self.wfile)) as writer:
                     self._copy_file(f, writer, start, content_length)
@@ -449,18 +429,18 @@ class BaseFileShareHandler(BaseHandler):
             self.respond_not_found()
             return
         if ext == '.tzst' or ext == '.tar.zst':
-            compress = True
             if not self.init_compressor():
                 self.respond_not_found()
                 return
+            compress = True
         else:
             compress = False
-        self.send_response(HTTPStatus.OK)
-        self.send_content_type('application/zip')
-        self.send_transfer_encoding('chunked')
         if self._is_from_commandline():
-            self.send_content_disposition(f'{os.path.basename(full_path)}{ext}')
-        self.end_headers()
+            filename = f'{os.path.basename(full_path)}{ext}'
+            content_disposition = f'attachment; filename="{parse.quote(filename)}"'
+        else:
+            content_disposition = None
+        self.respond(HTTPStatus.OK, content_type='application/zip', transfer_encoding='chunked', content_disposition=content_disposition)
         writer = ChunkWriter(self.wfile)
         if compress:
             writer = self._compressor.stream_writer(writer)
@@ -1113,7 +1093,7 @@ class HtmlBuilder:
 
     def build(self):
         self._list.append('</html>')
-        return ''.join(self._list)
+        return ''.join(self._list).encode()
 
 
 class FileItem:
