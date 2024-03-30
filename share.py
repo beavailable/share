@@ -59,7 +59,7 @@ class BaseHandler(BaseHTTPRequestHandler):
             return True
         try:
             import zstandard as zstd
-            self._compressor = zstd.ZstdCompressor()
+            self._compressor = zstd.ZstdCompressor(write_checksum=True)
             return True
         except ModuleNotFoundError:
             return False
