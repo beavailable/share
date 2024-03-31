@@ -432,7 +432,8 @@ class BaseFileShareHandler(BaseHandler):
             if start:
                 f.seek(start)
             if compress:
-                self._compressor.copy_stream(f, ChunkWriter(self.wfile), filesize, read_size=65536, write_size=65544)
+                with ChunkWriter(self.wfile) as writer:
+                    self._compressor.copy_stream(f, writer, filesize, read_size=65536, write_size=65544)
             else:
                 while content_length:
                     l = min(content_length, 65536)
