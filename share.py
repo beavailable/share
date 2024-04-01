@@ -68,15 +68,20 @@ class BaseHandler(BaseHTTPRequestHandler):
             return False
 
     def do_GET(self):
-        if self.path == '/favicon.ico':
+        self._split_path()
+        if self._path_only == '/favicon.ico':
             self.respond_for_file('favicon.ico')
             return
         if not self._password or self._validate_password():
             self.do_get()
             return
+        if self._path_only != '/':
+            self.respond_redirect(f'/?returnUrl={self.path}')
+            return
         self.respond_ok(self._build_html_for_password())
 
     def do_POST(self):
+        self._split_path()
         if not self._password or self._validate_password():
             self.do_post()
             return
@@ -91,11 +96,14 @@ class BaseHandler(BaseHTTPRequestHandler):
             cookie = f'password={parse.quote_plus(self._password)}; path=/'
             if remember_device == 'remember_device=on':
                 cookie += '; max-age=31536000'
+            redirect_url = parse.quote(self._queries.get('returnUrl', self._path_only))
         else:
             cookie = None
-        self.respond_redirect(self.path, cookie)
+            redirect_url = self.path
+        self.respond_redirect(redirect_url, cookie)
 
     def do_PUT(self):
+        self._split_path()
         if not self._password or self._validate_password():
             self.do_put()
             return
@@ -261,9 +269,8 @@ class BaseHandler(BaseHTTPRequestHandler):
             return None
         return (start, end)
 
-    def _split_path(self, path):
-        path, _, query = path.partition('?')
-        path = parse.unquote(path)
+    def _split_path(self):
+        path, _, query = parse.unquote(self.path).partition('?')
         parts = []
         for p in path.split('/'):
             if p == '..':
@@ -274,7 +281,11 @@ class BaseHandler(BaseHTTPRequestHandler):
         collapsed_path = '/' + '/'.join(parts)
         if path != '/' and path.endswith('/'):
             collapsed_path += '/'
-        return (collapsed_path, query)
+        queries = {}
+        for item in query.split('&'):
+            key, _, value = item.partition('=')
+            queries[key] = value
+        self._path_only, self._queries = collapsed_path, queries
 
     def _is_from_commandline(self):
         ua = self.headers['User-Agent']
@@ -449,16 +460,15 @@ class BaseFileShareHandler(BaseHandler):
         super().__init__(*args, **kwargs)
 
     def do_get(self):
-        path, _ = self._split_path(self.path)
-        if not self.is_url_valid(path):
+        if not self.is_url_valid(self._path_only):
             self.respond_not_found()
             return
-        redirect_url = self.get_redirect_url(path)
+        redirect_url = self.get_redirect_url(self._path_only)
         if redirect_url:
             self.respond_redirect(redirect_url)
             return
         try:
-            info = self.list_dir(path)
+            info = self.list_dir(self._path_only)
         except PermissionError:
             self.respond_forbidden()
             return
@@ -466,13 +476,13 @@ class BaseFileShareHandler(BaseHandler):
             self.respond_not_found()
             return
         if info:
-            self.respond_ok(self.build_html(path, *info))
+            self.respond_ok(self.build_html(self._path_only, *info))
             return
-        file_path = self.get_file(path)
+        file_path = self.get_file(self._path_only)
         if file_path:
             self.respond_for_file(file_path)
             return
-        info = self.get_archive(path)
+        info = self.get_archive(self._path_only)
         if info:
             self.respond_for_archive(*info)
             return
@@ -811,15 +821,13 @@ class DirectoryShareHandler(BaseFileShareHandler):
 
     def do_post(self):
         if self._upload:
-            path, _ = self._split_path(self.path)
-            self.handle_multipart(self._dir.rstrip('/') + path, parse.quote(path))
+            self.handle_multipart(self._dir.rstrip('/') + self._path_only, parse.quote(self._path_only))
         else:
             super().do_post()
 
     def do_put(self):
         if self._upload:
-            path, _ = self._split_path(self.path)
-            self.handle_putfile(self._dir.rstrip('/') + path)
+            self.handle_putfile(self._dir.rstrip('/') + self._path_only)
         else:
             super().do_put()
 
@@ -945,12 +953,10 @@ window.onload = on_load;
         return builder.build()
 
     def do_post(self):
-        path, _ = self._split_path(self.path)
-        self.handle_multipart(self._dir.rstrip('/') + path, parse.quote(path))
+        self.handle_multipart(self._dir.rstrip('/') + self._path_only, parse.quote(self._path_only))
 
     def do_put(self):
-        path, _ = self._split_path(self.path)
-        self.handle_putfile(self._dir.rstrip('/') + path)
+        self.handle_putfile(self._dir.rstrip('/') + self._path_only)
 
 
 class TextShareHandler(BaseHandler):
@@ -960,7 +966,7 @@ class TextShareHandler(BaseHandler):
         super().__init__(*args, **kwargs)
 
     def do_get(self):
-        if self.path != '/':
+        if self._path_only != '/':
             self.respond_redirect('/')
             return
         self.respond_ok(self.build_html())
@@ -988,7 +994,7 @@ class TextShareHandler(BaseHandler):
 class TextReceiveHandler(BaseHandler):
 
     def do_get(self):
-        if self.path != '/':
+        if self._path_only != '/':
             self.respond_redirect('/')
             return
         self.respond_ok(self.build_html())
@@ -1041,7 +1047,7 @@ window.onload = on_load;
         return builder.build()
 
     def do_post(self):
-        if self.path != '/':
+        if self._path_only != '/':
             self.respond_bad_request()
             return
         content_type = self.headers['Content-Type']
