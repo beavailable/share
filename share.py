@@ -369,10 +369,7 @@ class BaseHandler(BaseHTTPRequestHandler):
     def respond_internal_server_error(self):
         self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR)
 
-    def respond_for_file(self, file, ext=None):
-        if ext and ext != '.zst':
-            self.respond_not_found()
-            return
+    def respond_for_file(self, file):
         if file == 'favicon.ico':
             filename = 'favicon.ico'
             filesize = len(self.ico)
@@ -380,15 +377,9 @@ class BaseHandler(BaseHTTPRequestHandler):
         else:
             filename = os.path.basename(file)
             filesize = os.path.getsize(file)
-            if ext:
-                content_type = 'application/zstd'
-            else:
-                content_type = self._guess_type(file)
+            content_type = self._guess_type(file)
         request_range = self.headers['Range']
         if request_range:
-            if ext:
-                self.respond_not_found()
-                return
             request_range = self._parse_range(request_range, filesize)
             if not request_range:
                 self.respond_range_not_satisfiable()
@@ -422,13 +413,7 @@ class BaseHandler(BaseHTTPRequestHandler):
             if status == HTTPStatus.OK and if_modified_since and last_modified == if_modified_since:
                 self.respond(HTTPStatus.NOT_MODIFIED, content_type=content_type, cache_control=cache_control, last_modified=last_modified, accept_ranges=accept_ranges)
                 return
-            if status == HTTPStatus.OK and ext and self.init_compressor():
-                compress = True
-                content_length = None
-                transfer_encoding = 'chunked'
-                content_encoding = None
-                accept_ranges = None
-            elif status == HTTPStatus.OK and content_length >= 1024 and (file == 'favicon.ico' or content_type.startswith('text/')) and 'zstd' in self.get_accept_encoding() and self.init_compressor():
+            if status == HTTPStatus.OK and content_length >= 1024 and (file == 'favicon.ico' or content_type.startswith('text/')) and 'zstd' in self.get_accept_encoding() and self.init_compressor():
                 compress = True
                 content_length = None
                 transfer_encoding = 'chunked'
@@ -439,7 +424,7 @@ class BaseHandler(BaseHTTPRequestHandler):
                 transfer_encoding = None
                 content_encoding = None
             if self._is_from_commandline():
-                content_disposition = f'attachment; filename="{parse.quote(filename)}{ext if ext else ""}"'
+                content_disposition = f'attachment; filename="{parse.quote(filename)}"'
             else:
                 content_disposition = None
             self.respond(status, content_type=content_type, content_length=content_length, cache_control=cache_control, last_modified=last_modified, transfer_encoding=transfer_encoding, content_encoding=content_encoding, accept_ranges=accept_ranges, content_range=content_range, content_disposition=content_disposition)
@@ -453,6 +438,36 @@ class BaseHandler(BaseHTTPRequestHandler):
                     l = min(content_length, 65536)
                     self.wfile.write(f.read(l))
                     content_length -= l
+
+    def respond_for_compressed_file(self, file):
+        if not self.init_compressor():
+            self.respond_not_found()
+            return
+        content_type = 'application/zstd'
+        cache_control = 'public, no-cache'
+        try:
+            f = open(file, 'rb')
+            last_modified = str(os.fstat(f.fileno()).st_mtime)
+        except PermissionError:
+            self.respond_forbidden()
+            return
+        except FileNotFoundError:
+            self.respond_not_found()
+            return
+        with f:
+            if_modified_since = self.headers['If-Modified-Since']
+            if if_modified_since and last_modified == if_modified_since:
+                self.respond(HTTPStatus.NOT_MODIFIED, content_type=content_type, cache_control=cache_control, last_modified=last_modified)
+                return
+            transfer_encoding = 'chunked'
+            if self._is_from_commandline():
+                filename = os.path.basename(file)
+                content_disposition = f'attachment; filename="{parse.quote(filename)}.zst"'
+            else:
+                content_disposition = None
+            self.respond(HTTPStatus.OK, content_type=content_type, cache_control=cache_control, last_modified=last_modified, transfer_encoding=transfer_encoding, content_disposition=content_disposition)
+            with ChunkWriter(self.wfile) as writer:
+                self._compressor.copy_stream(f, writer, read_size=65536, write_size=65544)
 
     def log_request(self, code, size=None):
         self.log_message('%s %d %s', self.command, code, parse.unquote(self.path))
@@ -504,7 +519,7 @@ class BaseFileShareHandler(BaseHandler):
         if self._path_only.endswith('.zst'):
             file_path = self.get_file(self._path_only[:-4])
             if file_path:
-                self.respond_for_file(file_path, '.zst')
+                self.respond_for_compressed_file(file_path)
                 return
         self.respond_not_found()
 
