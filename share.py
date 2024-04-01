@@ -380,7 +380,10 @@ class BaseHandler(BaseHTTPRequestHandler):
         else:
             filename = os.path.basename(file)
             filesize = os.path.getsize(file)
-            content_type = self._guess_type(file)
+            if ext:
+                content_type = 'application/zstd'
+            else:
+                content_type = self._guess_type(file)
         request_range = self.headers['Range']
         if request_range:
             if ext:
