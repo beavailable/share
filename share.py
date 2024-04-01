@@ -369,7 +369,10 @@ class BaseHandler(BaseHTTPRequestHandler):
     def respond_internal_server_error(self):
         self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR)
 
-    def respond_for_file(self, file):
+    def respond_for_file(self, file, ext=None):
+        if ext and ext != '.zst':
+            self.respond_not_found()
+            return
         if file == 'favicon.ico':
             filename = 'favicon.ico'
             filesize = len(self.ico)
@@ -380,6 +383,9 @@ class BaseHandler(BaseHTTPRequestHandler):
             content_type = self._guess_type(file)
         request_range = self.headers['Range']
         if request_range:
+            if ext:
+                self.respond_not_found()
+                return
             request_range = self._parse_range(request_range, filesize)
             if not request_range:
                 self.respond_range_not_satisfiable()
@@ -413,7 +419,13 @@ class BaseHandler(BaseHTTPRequestHandler):
             if status == HTTPStatus.OK and if_modified_since and last_modified == if_modified_since:
                 self.respond(HTTPStatus.NOT_MODIFIED, content_type=content_type, cache_control=cache_control, last_modified=last_modified, accept_ranges=accept_ranges)
                 return
-            if status == HTTPStatus.OK and content_length >= 1024 and (file == 'favicon.ico' or content_type.startswith('text/')) and 'zstd' in self.get_accept_encoding() and self.init_compressor():
+            if status == HTTPStatus.OK and ext and self.init_compressor():
+                compress = True
+                content_length = None
+                transfer_encoding = 'chunked'
+                content_encoding = None
+                accept_ranges = None
+            elif status == HTTPStatus.OK and content_length >= 1024 and (file == 'favicon.ico' or content_type.startswith('text/')) and 'zstd' in self.get_accept_encoding() and self.init_compressor():
                 compress = True
                 content_length = None
                 transfer_encoding = 'chunked'
@@ -424,7 +436,7 @@ class BaseHandler(BaseHTTPRequestHandler):
                 transfer_encoding = None
                 content_encoding = None
             if self._is_from_commandline():
-                content_disposition = f'attachment; filename="{parse.quote(filename)}"'
+                content_disposition = f'attachment; filename="{parse.quote(filename)}{ext if ext else ""}"'
             else:
                 content_disposition = None
             self.respond(status, content_type=content_type, content_length=content_length, cache_control=cache_control, last_modified=last_modified, transfer_encoding=transfer_encoding, content_encoding=content_encoding, accept_ranges=accept_ranges, content_range=content_range, content_disposition=content_disposition)
@@ -486,6 +498,11 @@ class BaseFileShareHandler(BaseHandler):
         if info:
             self.respond_for_archive(*info)
             return
+        if self._path_only.endswith('.zst'):
+            file_path = self.get_file(self._path_only[:-4])
+            if file_path:
+                self.respond_for_file(file_path, '.zst')
+                return
         self.respond_not_found()
 
     def is_url_valid(self, path):
@@ -503,7 +520,7 @@ class BaseFileShareHandler(BaseHandler):
     def get_archive(self, path):
         return None
 
-    def respond_for_archive(self, full_path, ext):
+    def respond_for_archive(self, dir_path, ext):
         if ext != '.tar' and ext != '.tzst' and ext != '.tar.zst':
             self.respond_not_found()
             return
@@ -517,7 +534,7 @@ class BaseFileShareHandler(BaseHandler):
             compress = False
             content_type = 'application/x-tar'
         if self._is_from_commandline():
-            filename = f'{os.path.basename(full_path)}{ext}'
+            filename = f'{os.path.basename(dir_path)}{ext}'
             content_disposition = f'attachment; filename="{parse.quote(filename)}"'
         else:
             content_disposition = None
@@ -528,10 +545,7 @@ class BaseFileShareHandler(BaseHandler):
         with writer:
             with tarfile.open(None, 'w|', writer, 65536) as tar:
                 try:
-                    if os.path.isdir(full_path):
-                        self.archive_folder(os.path.dirname(full_path.rstrip('/')), full_path, tar)
-                    else:
-                        tar.add(full_path, os.path.basename(full_path))
+                    self.archive_folder(os.path.dirname(dir_path.rstrip('/')), dir_path, tar)
                 except (PermissionError, FileNotFoundError):
                     pass
 
@@ -728,23 +742,6 @@ class FileShareHandler(BaseFileShareHandler):
             return self._files[0]
         return None
 
-    def get_archive(self, path):
-        name = path[1:]
-        if name.endswith('.tar'):
-            name, ext = name[:-4], name[-4:]
-        elif name.endswith('.tzst'):
-            name, ext = name[:-5], name[-5:]
-        elif name.endswith('.tar.zst'):
-            name, ext = name[:-8], name[-8:]
-        else:
-            return None
-        f = self._find_file(name)
-        if f:
-            return (f, ext)
-        if len(self._files) == 1 and name == 'file':
-            return (self._files[0], ext)
-        return None
-
     def _find_file(self, name):
         for f in self._files:
             if os.path.basename(f) == name:
@@ -806,17 +803,17 @@ class DirectoryShareHandler(BaseFileShareHandler):
         return None
 
     def get_archive(self, path):
-        file_path = self._dir.rstrip('/') + path
-        if file_path.endswith('.tar'):
-            file_path, ext = file_path[:-4], file_path[-4:]
-        elif file_path.endswith('.tzst'):
-            file_path, ext = file_path[:-5], file_path[-5:]
-        elif file_path.endswith('.tar.zst'):
-            file_path, ext = file_path[:-8], file_path[-8:]
+        dir_path = self._dir.rstrip('/') + path
+        if dir_path.endswith('.tar'):
+            dir_path, ext = dir_path[:-4], dir_path[-4:]
+        elif dir_path.endswith('.tzst'):
+            dir_path, ext = dir_path[:-5], dir_path[-5:]
+        elif dir_path.endswith('.tar.zst'):
+            dir_path, ext = dir_path[:-8], dir_path[-8:]
         else:
             return None
-        if os.path.exists(file_path):
-            return (file_path, ext)
+        if os.path.isdir(dir_path):
+            return (dir_path, ext)
         return None
 
     def do_post(self):
