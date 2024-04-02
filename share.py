@@ -96,6 +96,7 @@ class BaseHandler(BaseHTTPRequestHandler):
             cookie = f'password={parse.quote_plus(self._password)}; path=/'
             if remember_device == 'remember_device=on':
                 cookie += '; max-age=31536000'
+            cookie += '; HttpOnly'
             redirect_url = parse.quote(self._queries.get('returnUrl', self._path_only))
         else:
             cookie = None
