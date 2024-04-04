@@ -1396,14 +1396,16 @@ def start_server(address, port, certfile, keyfile, keypass, handler_class):
         if certfile:
             ctx = create_ssl_context(certfile, keyfile, keypass)
             server.socket = ctx.wrap_socket(server.socket, server_side=True)
+            https = True
+        else:
+            https = False
         host, port = server.socket.getsockname()[:2]
-        http = 'https' if certfile else 'http'
         ip = addr[0]
         if ip == '0.0.0.0' or ip == '::':
             ip = get_ip(family)
         if family == socket.AF_INET6:
             ip = f'[{ip}]'
-        sys.stderr.write(f'Serving HTTP on {host} port {port} ({http}://{ip}:{port}/) ...\n')
+        sys.stderr.write(f'Serving {"HTTPS" if https else "HTTP"} on {host} port {port} ({"https" if https else "http"}://{ip}:{port}/) ...\n')
         server.serve_forever()
 
 
