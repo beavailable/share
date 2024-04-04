@@ -128,7 +128,7 @@ class BaseHandler(BaseHTTPRequestHandler):
     def get_accept_encoding(self):
         accept_encoding = self.headers['Accept-Encoding']
         if not accept_encoding:
-            return []
+            return set()
         return set(accept_encoding.split(', '))
 
     def handle_multipart(self, save_dir, redirect_location):
