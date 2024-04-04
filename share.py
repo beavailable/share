@@ -1352,6 +1352,18 @@ def get_best_family(host, port):
     return family, addr
 
 
+def get_ip(family):
+    address = ('255.255.255', 0) if family == socket.AF_INET else ('fc00::', 0, 0, 0)
+    default_ip = '127.0.0.1' if family == socket.AF_INET else '::1'
+    try:
+        with socket.socket(family, socket.SOCK_DGRAM) as s:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+            s.connect(address)
+            return s.getsockname()[0]
+    except OSError:
+        return default_ip
+
+
 def is_windows():
     return os.name == 'nt'
 
@@ -1378,13 +1390,20 @@ def create_ssl_context(certfile, keyfile=None, password=None):
 
 
 def start_server(address, port, certfile, keyfile, keypass, handler_class):
-    ShareServer.address_family, addr = get_best_family(address, port)
+    family, addr = get_best_family(address, port)
+    ShareServer.address_family = family
     with ShareServer(addr, handler_class) as server:
         if certfile:
             ctx = create_ssl_context(certfile, keyfile, keypass)
             server.socket = ctx.wrap_socket(server.socket, server_side=True)
         host, port = server.socket.getsockname()[:2]
-        sys.stderr.write(f'Serving HTTP on {host} port {port} ...\n')
+        http = 'https' if certfile else 'http'
+        ip = addr[0]
+        if ip == '0.0.0.0' or ip == '::':
+            ip = get_ip(family)
+        if family == socket.AF_INET6:
+            ip = f'[{ip}]'
+        sys.stderr.write(f'Serving HTTP on {host} port {port} ({http}://{ip}:{port}/) ...\n')
         server.serve_forever()
 
 
