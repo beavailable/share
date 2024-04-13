@@ -1353,7 +1353,7 @@ def get_best_family(host, port):
 
 
 def get_ip(family):
-    address = ('255.255.255.255', 0) if family == socket.AF_INET else ('fc00::', 0, 0, 0)
+    address = ('10.254.254.254', 0) if family == socket.AF_INET else ('ff05::', 0, 0, 0)
     default_ip = '127.0.0.1' if family == socket.AF_INET else '::1'
     try:
         with socket.socket(family, socket.SOCK_DGRAM) as s:
