@@ -1357,7 +1357,6 @@ def get_ip(family):
     default_ip = '127.0.0.1' if family == socket.AF_INET else '::1'
     try:
         with socket.socket(family, socket.SOCK_DGRAM) as s:
-            s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
             s.connect(address)
             return s.getsockname()[0]
     except OSError:
@@ -1384,7 +1383,6 @@ def print_prompt():
 def create_ssl_context(certfile, keyfile=None, password=None):
     ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
     ctx.minimum_version = ssl.TLSVersion.TLSv1_3
-    ctx.maximum_version = ssl.TLSVersion.TLSv1_3
     ctx.load_cert_chain(certfile=certfile, keyfile=keyfile, password=password)
     return ctx
 
