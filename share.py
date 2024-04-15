@@ -371,6 +371,7 @@ class BaseHandler(BaseHTTPRequestHandler):
         else:
             self.send_response(HTTPStatus.NOT_MODIFIED)
         self.send_header('Content-Type', 'text/html; charset=utf-8')
+        self.send_header('Cache-Control', 'public, no-cache')
         self.send_header('Last-Modified', last_modified)
         if html:
             l = len(html)
