@@ -336,7 +336,7 @@ class BaseHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def respond_redirect(self, location, cookie=None):
-        self.respond(HTTPStatus.SEE_OTHER, location=location, cookie=cookie)
+        self.respond(HTTPStatus.SEE_OTHER, content_length='0', location=location, cookie=cookie)
 
     def respond_not_modified(self, last_modified, content_type='text/html; charset=utf-8', accept_ranges=None):
         self.respond(HTTPStatus.NOT_MODIFIED, content_type=content_type, cache_control='public, no-cache', last_modified=last_modified, accept_ranges=accept_ranges)
