@@ -79,7 +79,7 @@ class BaseHandler(BaseHTTPRequestHandler):
             self.respond_redirect(f'/?returnUrl={self.path}')
             return
         if self.get_if_modified_since() == self.start_time:
-            self.respond_for_html(self.start_time)
+            self.respond_not_modified(self.start_time)
         else:
             self.respond_for_html(self.start_time, self._build_html_for_password())
 
@@ -191,7 +191,7 @@ class BaseHandler(BaseHTTPRequestHandler):
         except FileExistsError:
             self.respond_internal_server_error()
         else:
-            self.respond_ok()
+            self.respond(HTTPStatus.OK, content_length='0')
 
     def send_response(self, code, message=None):
         self.log_request(code)
@@ -309,7 +309,7 @@ class BaseHandler(BaseHTTPRequestHandler):
             guess = f'{guess}; charset=utf-8'
         return guess
 
-    def respond(self, status, *, content_type=None, content_length=None, cache_control=None, last_modified=None, transfer_encoding=None, content_encoding=None, accept_ranges=None, content_range=None, content_disposition=None):
+    def respond(self, status, *, content_type=None, content_length=None, cache_control=None, last_modified=None, transfer_encoding=None, content_encoding=None, accept_ranges=None, content_range=None, content_disposition=None, location=None, cookie=None):
         self.send_response(status)
         if content_type is not None:
             self.send_header('Content-Type', content_type)
@@ -329,20 +329,17 @@ class BaseHandler(BaseHTTPRequestHandler):
             self.send_header('Content-Range', content_range)
         if content_disposition is not None:
             self.send_header('Content-Disposition', content_disposition)
-        self.end_headers()
-
-    def respond_ok(self):
-        self.send_response(HTTPStatus.OK)
-        self.send_header('Content-Length', '0')
+        if location is not None:
+            self.send_header('Location', location)
+        if cookie is not None:
+            self.send_header('Set-Cookie', cookie)
         self.end_headers()
 
     def respond_redirect(self, location, cookie=None):
-        self.send_response(HTTPStatus.SEE_OTHER)
-        self.send_header('Content-Length', '0')
-        self.send_header('Location', location)
-        if cookie:
-            self.send_header('Set-Cookie', cookie)
-        self.end_headers()
+        self.respond(HTTPStatus.SEE_OTHER, content_length='0', location=location, cookie=cookie)
+
+    def respond_not_modified(self, last_modified, content_type='text/html; charset=utf-8', accept_ranges=None):
+        self.respond(HTTPStatus.NOT_MODIFIED, content_type=content_type, cache_control='public, no-cache', last_modified=last_modified, accept_ranges=accept_ranges)
 
     def respond_range_not_satisfiable(self):
         self.send_error(HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
@@ -365,26 +362,16 @@ class BaseHandler(BaseHTTPRequestHandler):
     def respond_internal_server_error(self):
         self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR)
 
-    def respond_for_html(self, last_modified, html=None):
-        if html:
-            self.send_response(HTTPStatus.OK)
+    def respond_for_html(self, last_modified, html):
+        if len(html) >= 1024 and 'zstd' in self.get_accept_encoding() and self.init_compressor():
+            html = self._compressor.compress(html)
+            content_length = len(html)
+            content_encoding = 'zstd'
         else:
-            self.send_response(HTTPStatus.NOT_MODIFIED)
-        self.send_header('Content-Type', 'text/html; charset=utf-8')
-        self.send_header('Cache-Control', 'public, no-cache')
-        self.send_header('Last-Modified', last_modified)
-        if html:
-            l = len(html)
-            if l >= 1024 and 'zstd' in self.get_accept_encoding() and self.init_compressor():
-                html = self._compressor.compress(html)
-                l = len(html)
-                self.send_header('Content-Encoding', 'zstd')
-            self.send_header('Content-Length', l)
-            self.end_headers()
-            self.wfile.write(html)
-        else:
-            self.send_header('Content-Length', '0')
-            self.end_headers()
+            content_length = len(html)
+            content_encoding = None
+        self.respond(HTTPStatus.OK, content_type='text/html; charset=utf-8', content_length=content_length, cache_control='public, no-cache', last_modified=last_modified, content_encoding=content_encoding)
+        self.wfile.write(html)
 
     def respond_for_file(self, file):
         if file == 'favicon.ico':
@@ -427,7 +414,7 @@ class BaseHandler(BaseHTTPRequestHandler):
         accept_ranges = 'bytes'
         with f:
             if status == HTTPStatus.OK and self.get_if_modified_since() == last_modified:
-                self.respond(HTTPStatus.NOT_MODIFIED, content_type=content_type, cache_control=cache_control, last_modified=last_modified, accept_ranges=accept_ranges)
+                self.respond_not_modified(last_modified, content_type=content_type, accept_ranges=accept_ranges)
                 return
             if status == HTTPStatus.OK and content_length >= 1024 and (file == 'favicon.ico' or content_type.startswith('text/')) and 'zstd' in self.get_accept_encoding() and self.init_compressor():
                 compress = True
@@ -472,7 +459,7 @@ class BaseHandler(BaseHTTPRequestHandler):
             return
         with f:
             if self.get_if_modified_since() == last_modified:
-                self.respond(HTTPStatus.NOT_MODIFIED, content_type=content_type, cache_control=cache_control, last_modified=last_modified)
+                self.respond_not_modified(last_modified, content_type=content_type)
                 return
             transfer_encoding = 'chunked'
             if self._is_from_commandline():
@@ -725,7 +712,7 @@ class FileShareHandler(BaseFileShareHandler):
         if self._path_only == '/':
             dirs, files = self.list_files()
             if self.get_if_modified_since() == self.start_time:
-                self.respond_for_html(self.start_time)
+                self.respond_not_modified(self.start_time)
             else:
                 self.respond_for_html(self.start_time, self.build_html(self._path_only, dirs, files))
             return
@@ -794,7 +781,7 @@ class DirectoryShareHandler(BaseFileShareHandler):
                 self.respond_not_found()
                 return
             if self.get_if_modified_since() == last_modified:
-                self.respond_for_html(last_modified)
+                self.respond_not_modified(last_modified)
             else:
                 try:
                     dirs, files = self.list_dir(full_path)
@@ -906,7 +893,7 @@ class FileReceiveHandler(BaseHandler):
 
     def do_get(self):
         if self.get_if_modified_since() == self.start_time:
-            self.respond_for_html(self.start_time)
+            self.respond_not_modified(self.start_time)
         else:
             self.respond_for_html(self.start_time, self.build_html())
 
@@ -1016,7 +1003,7 @@ class TextShareHandler(BaseHandler):
             self.respond_redirect('/')
             return
         if self.get_if_modified_since() == self.start_time:
-            self.respond_for_html(self.start_time)
+            self.respond_not_modified(self.start_time)
         else:
             self.respond_for_html(self.start_time, self.build_html())
 
@@ -1047,7 +1034,7 @@ class TextReceiveHandler(BaseHandler):
             self.respond_redirect('/')
             return
         if self.get_if_modified_since() == self.start_time:
-            self.respond_for_html(self.start_time)
+            self.respond_not_modified(self.start_time)
         else:
             self.respond_for_html(self.start_time, self.build_html())
 
