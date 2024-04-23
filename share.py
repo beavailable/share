@@ -415,7 +415,7 @@ class BaseHandler(BaseHTTPRequestHandler):
             if status == HTTPStatus.OK and self.get_if_modified_since() == last_modified:
                 self.respond_not_modified(last_modified, content_type=content_type, accept_ranges=accept_ranges)
                 return
-            if status == HTTPStatus.OK and content_length >= 1024 and (file == 'favicon.ico' or content_type.startswith('text/')) and 'zstd' in self.get_accept_encoding() and self.init_compressor():
+            if status == HTTPStatus.OK and content_length >= 1024 and 'zstd' in self.get_accept_encoding() and self.init_compressor():
                 compress = True
                 content_length = None
                 transfer_encoding = 'chunked'
