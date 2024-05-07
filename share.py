@@ -652,7 +652,6 @@ window.onload = on_load;
             builder.append(f'{html.escape(d.name)}')
             builder.append('</a>')
             builder.append('<span class="item-right">')
-            builder.append(f'<span class="size">{d.size} {"item" if d.size == 1 else "items"}</span>')
             builder.append(f'<a class="btn-download" href="{quoted_name}.tar" title="Archive" download>')
             builder.append('<svg xmlns="http://www.w3.org/2000/svg" height="20" width="20" fill="#0b57d0"><path d="M4.208 17.5q-.687 0-1.198-.5-.51-.5-.51-1.188V5.438q0-.334.115-.573.114-.24.281-.469L4.062 3q.167-.229.417-.365.25-.135.542-.135h9.958q.292 0 .542.135.25.136.437.365l1.167 1.396q.167.229.271.469.104.239.104.573v10.374q0 .688-.5 1.188t-1.188.5Zm.375-12.438h10.855l-.709-.812H5.292ZM4.25 15.75h11.5V6.812H4.25v8.938ZM10 14.396q.167 0 .333-.073.167-.073.292-.198l2.104-2.104q.25-.25.25-.604 0-.355-.25-.605t-.604-.25q-.354 0-.604.25l-.646.646v-2.5q0-.354-.26-.614-.261-.261-.615-.261t-.615.261q-.26.26-.26.614v2.5l-.646-.646q-.25-.25-.604-.25t-.604.25q-.25.25-.25.605 0 .354.25.604l2.104 2.104q.125.125.292.198.166.073.333.073ZM4.25 15.75V6.812v8.938Z"/></svg>')
             builder.append('</a>')
@@ -824,12 +823,7 @@ class DirectoryShareHandler(BaseFileShareHandler):
             hidden = self.is_hidden(full_path)
             if self._all or not hidden:
                 if os.path.isdir(full_path):
-                    items = []
-                    try:
-                        items = [f for f in os.listdir(full_path) if self._all or not self.is_hidden(f'{full_path}/{f}')]
-                    except Exception:
-                        pass
-                    dirs.append(FileItem(name, hidden, len(items)))
+                    dirs.append(FileItem(name, hidden, None))
                 else:
                     size = 0
                     try:
