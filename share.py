@@ -305,7 +305,7 @@ class BaseHandler(BaseHTTPRequestHandler):
     def _guess_type(self, path):
         guess, _ = mimetypes.guess_type(path)
         if not guess:
-            guess = 'text/plain'
+            guess = 'application/octet-stream'
         if guess.startswith('text'):
             guess = f'{guess}; charset=utf-8'
         return guess
