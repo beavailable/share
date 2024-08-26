@@ -514,11 +514,11 @@ class BaseFileShareHandler(BaseHandler):
         with writer:
             with tarfile.open(None, 'w|', writer, 65536) as tar:
                 try:
-                    self.archive_folder(os.path.dirname(dir_path.rstrip('/')), dir_path, tar)
+                    tar.add(dir_path, '', filter=self.archive_filter)
                 except (PermissionError, FileNotFoundError):
                     pass
 
-    def archive_folder(self, base_dir, dir_path, tar):
+    def archive_filter(self, tarinfo):
         raise NotImplementedError
 
     def build_html(self, path, dirs, files):
@@ -845,22 +845,11 @@ class DirectoryShareHandler(BaseFileShareHandler):
         else:
             super().do_put()
 
-    def archive_folder(self, base_dir, dir_path, tar):
-        if not base_dir.endswith('/'):
-            base_dir += '/'
-        if not dir_path.endswith('/'):
-            dir_path += '/'
-        for name in sorted(os.listdir(dir_path)):
-            path = dir_path + name
-            if self._all or not self.is_hidden(path):
-                if os.path.isdir(path):
-                    self.archive_folder(base_dir, path, tar)
-                else:
-                    arcname = path[len(base_dir):]
-                    try:
-                        tar.add(path, arcname, False)
-                    except (PermissionError, FileNotFoundError):
-                        pass
+    def archive_filter(self, tarinfo):
+        if self._all or not self.is_hidden(tarinfo.name):
+            return tarinfo
+        else:
+            return None
 
     def _contains_hidden_segment_windows(self, path):
         if path == '/':
