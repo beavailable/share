@@ -503,7 +503,7 @@ class BaseFileShareHandler(BaseHandler):
             compress = False
             content_type = 'application/x-tar'
         if self._is_from_commandline():
-            filename = f'{os.path.basename(dir_path)}{ext}'
+            filename = f'{os.path.basename(dir_path.rstrip("/"))}{ext}'
             content_disposition = f'attachment; filename="{parse.quote(filename)}"'
         else:
             content_disposition = None
