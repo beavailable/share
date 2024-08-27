@@ -750,9 +750,9 @@ class FileShareHandler(BaseFileShareHandler):
 
 class DirectoryShareHandler(BaseFileShareHandler):
 
-    def __init__(self, dir, all, *args, **kwargs):
-        self._dir = dir.rstrip('/\\') + '/'
-        self._all = all
+    def __init__(self, dir_path, all_files, *args, **kwargs):
+        self._dir = dir_path.rstrip('/\\') + '/'
+        self._all = all_files
         if is_windows():
             self._contains_hidden_segment = self._contains_hidden_segment_windows
         else:
@@ -867,8 +867,8 @@ class DirectoryShareHandler(BaseFileShareHandler):
 
 class FileReceiveHandler(BaseHandler):
 
-    def __init__(self, dir, *args, **kwargs):
-        self._dir = dir
+    def __init__(self, dir_path, *args, **kwargs):
+        self._dir = dir_path
         super().__init__(*args, **kwargs)
 
     def do_get(self):
@@ -1423,14 +1423,14 @@ def main():
     if not args.receive:
         args.share = True
     if args.share and args.receive:
-        dir = None
+        dir_path = None
         if not args.arguments:
-            dir = os.getcwd()
+            dir_path = os.getcwd()
         elif os.path.isdir(args.arguments[0]):
-            dir = args.arguments[0]
+            dir_path = args.arguments[0]
         else:
             raise FileNotFoundError(f'{args.arguments[0]} is not a directory')
-        handler_class = functools.partial(DirectoryShareHandler, dir, args.all, upload=True, password=args.password)
+        handler_class = functools.partial(DirectoryShareHandler, dir_path, args.all, upload=True, password=args.password)
     elif args.share:
         if args.text:
             if args.arguments:
@@ -1442,32 +1442,32 @@ def main():
                     sys.exit(1)
             handler_class = functools.partial(TextShareHandler, text, password=args.password)
         else:
-            dir, files = None, None
+            dir_path, files = None, None
             if not args.arguments:
-                dir = os.getcwd()
+                dir_path = os.getcwd()
             elif os.path.isdir(args.arguments[0]):
-                dir = args.arguments[0]
+                dir_path = args.arguments[0]
             else:
                 for f in args.arguments:
                     if not os.path.isfile(f):
                         raise FileNotFoundError(f'{f} is not a file')
                 files = [os.path.realpath(f) for f in args.arguments]
-            if dir:
-                handler_class = functools.partial(DirectoryShareHandler, dir, args.all, password=args.password)
+            if dir_path:
+                handler_class = functools.partial(DirectoryShareHandler, dir_path, args.all, password=args.password)
             else:
                 handler_class = functools.partial(FileShareHandler, files, password=args.password)
     else:
         if args.text:
             handler_class = functools.partial(TextReceiveHandler, password=args.password)
         else:
-            dir = None
+            dir_path = None
             if not args.arguments:
-                dir = os.getcwd()
+                dir_path = os.getcwd()
             elif os.path.isdir(args.arguments[0]):
-                dir = args.arguments[0]
+                dir_path = args.arguments[0]
             else:
                 raise FileNotFoundError(f'{args.arguments[0]} is not a directory')
-            handler_class = functools.partial(FileReceiveHandler, dir, password=args.password)
+            handler_class = functools.partial(FileReceiveHandler, dir_path, password=args.password)
     start_server(args.address, args.port, args.certfile, args.keyfile, args.keypass, handler_class)
 
 
