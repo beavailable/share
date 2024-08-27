@@ -12,7 +12,7 @@ This is a command-line file sharing tool, which has just a single file and is ea
 
 # Usage
 ```
-usage: share.py [-b ADDRESS] [-p PORT] [-s] [-r] [-a] [-t] [-P [PASSWORD]] [-h] [--certfile CERTFILE] [--keyfile KEYFILE] [--keypass KEYPASS] [arguments ...]
+usage: share.py [-b ADDRESS] [-p PORT] [-s] [-r] [-a] [-z] [-t] [-P [PASSWORD]] [-h] [--certfile CERTFILE] [--keyfile KEYFILE] [--keypass KEYPASS] [arguments ...]
 
 positional arguments:
   arguments             a directory, files or texts
@@ -24,6 +24,7 @@ general options:
   -s, --share           share mode (default mode)
   -r, --receive         receive mode, can be used with -s option (only for directory)
   -a, --all             show all files, including hidden ones, only for directory
+  -z, --archive         share the directory itself as an archive, only for directory
   -t, --text            for text
   -P [PASSWORD], --password [PASSWORD]
                         access password, if no PASSWORD is specified, the environment variable SHARE_PASSWORD will be used

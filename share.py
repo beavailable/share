@@ -688,6 +688,8 @@ window.onload = on_load;
         return os.path.basename(file_path).startswith('.')
 
     def _format_size(self, size):
+        if size < 0:
+            return 'unknown'
         lst = ((1024, 'KiB'), (1048576, 'MiB'), (1073741824, 'GiB'), (1099511627776, 'TiB'))
         idx = 0
         if size < 1048576:
@@ -699,6 +701,42 @@ window.onload = on_load;
         else:
             idx = 3
         return f'{size/lst[idx][0]:.2f} {lst[idx][1]}'
+
+
+class VirtualTarShareHandler(BaseFileShareHandler):
+
+    def __init__(self, dir_path, all_files, *args, **kwargs):
+        self._dir = dir_path.rstrip('/\\') + '/'
+        self._all = all_files
+        super().__init__(*args, **kwargs)
+
+    def do_get(self):
+        basename = os.path.basename(self._dir.rstrip('/'))
+        if self._path_only == '/':
+            last_modified = str(self.start_time)
+            if self.get_if_modified_since() == last_modified:
+                self.respond_not_modified(last_modified)
+            else:
+                dirs, files = [], [FileItem(f'{basename}.tar', False, -1)]
+                self.respond_for_html(self.build_html(self._path_only, dirs, files), last_modified)
+            return
+        name = self._path_only[1:]
+        if name == f'{basename}.tar' or name == 'file' or name == 'file.tar':
+            self.respond_for_archive(self._dir, '.tar')
+            return
+        if name == f'{basename}.tar.zst' or name == 'file.tar.zst':
+            self.respond_for_archive(self._dir, '.tar.zst')
+            return
+        if name == f'{basename}.tzst' or name == 'file.tzst':
+            self.respond_for_archive(self._dir, '.tzst')
+            return
+        self.respond_not_found()
+
+    def archive_filter(self, tarinfo):
+        if self._all or not self.is_hidden(tarinfo.name):
+            return tarinfo
+        else:
+            return None
 
 
 class FileShareHandler(BaseFileShareHandler):
@@ -1408,6 +1446,7 @@ def main():
     general.add_argument('-s', '--share', action='store_true', help='share mode (default mode)')
     general.add_argument('-r', '--receive', action='store_true', help='receive mode, can be used with -s option (only for directory)')
     general.add_argument('-a', '--all', action='store_true', help='show all files, including hidden ones, only for directory')
+    general.add_argument('-z', '--archive', action='store_true', help='share the directory itself as an archive, only for directory')
     general.add_argument('-t', '--text', action='store_true', help='for text')
     general.add_argument('-P', '--password', nargs='?', const=os.getenv('SHARE_PASSWORD'), help='access password, if no PASSWORD is specified, the environment variable SHARE_PASSWORD will be used')
     general.add_argument('-h', '--help', action='help', help='show this help message and exit')
@@ -1453,7 +1492,10 @@ def main():
                         raise FileNotFoundError(f'{f} is not a file')
                 files = [os.path.realpath(f) for f in args.arguments]
             if dir_path:
-                handler_class = functools.partial(DirectoryShareHandler, dir_path, args.all, password=args.password)
+                if args.archive:
+                    handler_class = functools.partial(VirtualTarShareHandler, dir_path, args.all, password=args.password)
+                else:
+                    handler_class = functools.partial(DirectoryShareHandler, dir_path, args.all, password=args.password)
             else:
                 handler_class = functools.partial(FileShareHandler, files, password=args.password)
     else:
