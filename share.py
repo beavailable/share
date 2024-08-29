@@ -441,34 +441,6 @@ class BaseHandler(BaseHTTPRequestHandler):
                     self.wfile.write(f.read(l))
                     content_length -= l
 
-    def respond_for_compressed_file(self, file):
-        if not self.init_compressor():
-            self.respond_not_found()
-            return
-        content_type = 'application/zstd'
-        try:
-            f = open(file, 'rb')
-            last_modified = str(os.fstat(f.fileno()).st_mtime)
-        except PermissionError:
-            self.respond_forbidden()
-            return
-        except FileNotFoundError:
-            self.respond_not_found()
-            return
-        with f:
-            if self.get_if_modified_since() == last_modified:
-                self.respond_not_modified(last_modified, content_type=content_type)
-                return
-            transfer_encoding = 'chunked'
-            if self._is_from_commandline():
-                filename = os.path.basename(file)
-                content_disposition = f'attachment; filename="{parse.quote(filename)}.zst"'
-            else:
-                content_disposition = None
-            self.respond(HTTPStatus.OK, content_type=content_type, last_modified=last_modified, transfer_encoding=transfer_encoding, content_disposition=content_disposition)
-            with ChunkWriter(self.wfile) as writer:
-                self._compressor.copy_stream(f, writer, read_size=65536, write_size=65544)
-
     def log_request(self, code, size=None):
         self.log_message('%s %d %s', self.command, code, parse.unquote(self.path))
 
@@ -489,29 +461,17 @@ class BaseFileShareHandler(BaseHandler):
             self.is_hidden = self._is_hidden_unix
         super().__init__(*args, **kwargs)
 
-    def respond_for_archive(self, dir_path, ext):
-        if ext != '.tar' and ext != '.tzst' and ext != '.tar.zst':
+    def respond_for_archive(self, dir_path):
+        if not self.init_compressor():
             self.respond_not_found()
             return
-        if ext == '.tzst' or ext == '.tar.zst':
-            if not self.init_compressor():
-                self.respond_not_found()
-                return
-            compress = True
-            content_type = 'application/zstd'
-        else:
-            compress = False
-            content_type = 'application/x-tar'
         if self._is_from_commandline():
-            filename = f'{os.path.basename(dir_path.rstrip("/"))}{ext}'
+            filename = f'{os.path.basename(dir_path.rstrip("/"))}.tar.zst'
             content_disposition = f'attachment; filename="{parse.quote(filename)}"'
         else:
             content_disposition = None
-        self.respond(HTTPStatus.OK, content_type=content_type, transfer_encoding='chunked', content_disposition=content_disposition)
-        writer = ChunkWriter(self.wfile)
-        if compress:
-            writer = self._compressor.stream_writer(writer, write_size=65544)
-        with writer:
+        self.respond(HTTPStatus.OK, content_type='application/zstd', transfer_encoding='chunked', content_disposition=content_disposition)
+        with self._compressor.stream_writer(ChunkWriter(self.wfile), write_size=65544) as writer:
             with tarfile.open(None, 'w|', writer, 65536) as tar:
                 try:
                     tar.add(dir_path, '', filter=self.archive_filter)
@@ -652,7 +612,7 @@ window.onload = on_load;
             builder.append(f'{html.escape(d.name)}')
             builder.append('</a>')
             builder.append('<span class="item-right">')
-            builder.append(f'<a class="btn-download" href="{quoted_name}.tar" title="Archive" download>')
+            builder.append(f'<a class="btn-download" href="{quoted_name}.tar.zst" title="Archive" download>')
             builder.append('<svg xmlns="http://www.w3.org/2000/svg" height="20" width="20" fill="#0b57d0"><path d="M4.208 17.5q-.687 0-1.198-.5-.51-.5-.51-1.188V5.438q0-.334.115-.573.114-.24.281-.469L4.062 3q.167-.229.417-.365.25-.135.542-.135h9.958q.292 0 .542.135.25.136.437.365l1.167 1.396q.167.229.271.469.104.239.104.573v10.374q0 .688-.5 1.188t-1.188.5Zm.375-12.438h10.855l-.709-.812H5.292ZM4.25 15.75h11.5V6.812H4.25v8.938ZM10 14.396q.167 0 .333-.073.167-.073.292-.198l2.104-2.104q.25-.25.25-.604 0-.355-.25-.605t-.604-.25q-.354 0-.604.25l-.646.646v-2.5q0-.354-.26-.614-.261-.261-.615-.261t-.615.261q-.26.26-.26.614v2.5l-.646-.646q-.25-.25-.604-.25t-.604.25q-.25.25-.25.605 0 .354.25.604l2.104 2.104q.125.125.292.198.166.073.333.073ZM4.25 15.75V6.812v8.938Z"/></svg>')
             builder.append('</a>')
             builder.append('</span>')
@@ -707,28 +667,22 @@ class VirtualTarShareHandler(BaseFileShareHandler):
 
     def __init__(self, dir_path, all_files, *args, **kwargs):
         self._dir = dir_path.rstrip('/\\') + '/'
+        self._filename = f'{os.path.basename(self._dir.rstrip("/"))}.tar.zst'
         self._all = all_files
         super().__init__(*args, **kwargs)
 
     def do_get(self):
-        basename = os.path.basename(self._dir.rstrip('/'))
         if self._path_only == '/':
             last_modified = str(self.start_time)
             if self.get_if_modified_since() == last_modified:
                 self.respond_not_modified(last_modified)
             else:
-                dirs, files = [], [FileItem(f'{basename}.tar', False, -1)]
+                dirs, files = [], [FileItem(self._filename, False, -1)]
                 self.respond_for_html(self.build_html(self._path_only, dirs, files), last_modified)
             return
         name = self._path_only[1:]
-        if name == f'{basename}.tar' or name == 'file' or name == 'file.tar':
-            self.respond_for_archive(self._dir, '.tar')
-            return
-        if name == f'{basename}.tar.zst' or name == 'file.tar.zst':
-            self.respond_for_archive(self._dir, '.tar.zst')
-            return
-        if name == f'{basename}.tzst' or name == 'file.tzst':
-            self.respond_for_archive(self._dir, '.tzst')
+        if name == self._filename or name == 'file':
+            self.respond_for_archive(self._dir)
             return
         self.respond_not_found()
 
@@ -755,11 +709,6 @@ class FileShareHandler(BaseFileShareHandler):
         if file_path:
             self.respond_for_file(file_path)
             return
-        if name.endswith('.zst'):
-            file_path = self.get_file(name[:-4])
-            if file_path:
-                self.respond_for_compressed_file(file_path)
-                return
         self.respond_not_found()
 
     def list_files(self):
@@ -830,23 +779,11 @@ class DirectoryShareHandler(BaseFileShareHandler):
         if os.path.isfile(full_path):
             self.respond_for_file(full_path)
             return
-        if full_path.endswith('.tar'):
-            full_path, ext = full_path[:-4], full_path[-4:]
-        elif full_path.endswith('.tzst'):
-            full_path, ext = full_path[:-5], full_path[-5:]
-        elif full_path.endswith('.tar.zst'):
-            full_path, ext = full_path[:-8], full_path[-8:]
-        elif full_path.endswith('.zst'):
-            full_path, ext = full_path[:-4], full_path[-4:]
-        else:
-            self.respond_not_found()
-            return
-        if ext != '.zst' and os.path.isdir(full_path):
-            self.respond_for_archive(full_path, ext)
-            return
-        if ext == '.zst' and os.path.isfile(full_path):
-            self.respond_for_compressed_file(full_path)
-            return
+        if full_path.endswith('.tar.zst'):
+            full_path = full_path[:-8]
+            if os.path.isdir(full_path):
+                self.respond_for_archive(full_path)
+                return
         self.respond_not_found()
 
     def is_url_valid(self, path):
