@@ -473,12 +473,29 @@ class BaseFileShareHandler(BaseHandler):
         self.respond(HTTPStatus.OK, content_type='application/zstd', transfer_encoding='chunked', content_disposition=content_disposition)
         with self._compressor.stream_writer(ChunkWriter(self.wfile), write_size=65544) as writer:
             with tarfile.open(None, 'w|', writer, 65536) as tar:
-                try:
-                    tar.add(dir_path, '', filter=self.archive_filter)
-                except (PermissionError, FileNotFoundError):
-                    pass
+                self.archive_folder(dir_path, '', tar)
 
-    def archive_filter(self, tarinfo):
+    def archive_folder(self, dir_path, arcname, tar):
+        for name in sorted(os.listdir(dir_path)):
+            full_path = dir_path.rstrip('/') + '/' + name
+            if not self.archive_filter(full_path):
+                continue
+            tarinfo = tar.gettarinfo(full_path, arcname + '/' + name)
+            if not tarinfo:
+                continue
+            try:
+                if tarinfo.isdir():
+                    tar.addfile(tarinfo)
+                    self.archive_folder(full_path, arcname + '/' + name, tar)
+                elif tarinfo.isfile():
+                    with open(full_path, 'rb') as f:
+                        tar.addfile(tarinfo, f)
+                else:
+                    tar.addfile(tarinfo)
+            except (PermissionError, FileNotFoundError):
+                continue
+
+    def archive_filter(self, path):
         raise NotImplementedError
 
     def build_html(self, path, dirs, files):
@@ -686,11 +703,8 @@ class VirtualTarShareHandler(BaseFileShareHandler):
             return
         self.respond_not_found()
 
-    def archive_filter(self, tarinfo):
-        if self._all or not self.is_hidden(tarinfo.name):
-            return tarinfo
-        else:
-            return None
+    def archive_filter(self, path):
+        return self._all or not self.is_hidden(path)
 
 
 class FileShareHandler(BaseFileShareHandler):
@@ -820,11 +834,8 @@ class DirectoryShareHandler(BaseFileShareHandler):
         else:
             super().do_put()
 
-    def archive_filter(self, tarinfo):
-        if self._all or not self.is_hidden(tarinfo.name):
-            return tarinfo
-        else:
-            return None
+    def archive_filter(self, path):
+        return self._all or not self.is_hidden(path)
 
     def _contains_hidden_segment_windows(self, path):
         if path == '/':
