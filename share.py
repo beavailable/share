@@ -466,7 +466,10 @@ class BaseFileShareHandler(BaseHandler):
             self.respond_not_found()
             return
         if self._is_from_commandline():
-            filename = f'{os.path.basename(dir_path.rstrip("/"))}.tar.zst'
+            if dir_path == '/':
+                filename = 'root.tar.zst'
+            else:
+                filename = f'{os.path.basename(dir_path.rstrip("/"))}.tar.zst'
             content_disposition = f'attachment; filename="{parse.quote(filename)}"'
         else:
             content_disposition = None
@@ -684,7 +687,10 @@ class VirtualTarShareHandler(BaseFileShareHandler):
 
     def __init__(self, dir_path, all_files, *args, **kwargs):
         self._dir = dir_path.rstrip('/\\') + '/'
-        self._filename = f'{os.path.basename(self._dir.rstrip("/"))}.tar.zst'
+        if dir_path == '/':
+            self._filename = 'root.tar.zst'
+        else:
+            self._filename = f'{os.path.basename(self._dir.rstrip("/"))}.tar.zst'
         self._all = all_files
         super().__init__(*args, **kwargs)
 
