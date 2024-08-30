@@ -9,10 +9,11 @@ This is a command-line file sharing tool, which has just a single file and is ea
 - Password sharing
 - TLS support
 - Zstd compression support (requires [python-zstandard](https://github.com/indygreg/python-zstandard) library, but is optional)
+- QR code support (requires [python-qrcode](https://github.com/lincolnloop/python-qrcode) library, but is optional)
 
 # Usage
 ```
-usage: share.py [-b ADDRESS] [-p PORT] [-s] [-r] [-a] [-z] [-t] [-P [PASSWORD]] [-h] [--certfile CERTFILE] [--keyfile KEYFILE] [--keypass KEYPASS] [arguments ...]
+usage: share.py [-b ADDRESS] [-p PORT] [-s] [-r] [-a] [-z] [-t] [-P [PASSWORD]] [-q] [-h] [--certfile CERTFILE] [--keyfile KEYFILE] [--keypass KEYPASS] [arguments ...]
 
 positional arguments:
   arguments             a directory, files or texts
@@ -28,6 +29,7 @@ general options:
   -t, --text            for text
   -P [PASSWORD], --password [PASSWORD]
                         access password, if no PASSWORD is specified, the environment variable SHARE_PASSWORD will be used
+  -q, --qrcode          show the qrcode
   -h, --help            show this help message and exit
 
 tls options:

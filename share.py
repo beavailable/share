@@ -1368,7 +1368,7 @@ def create_ssl_context(certfile, keyfile=None, password=None):
     return ctx
 
 
-def start_server(address, port, certfile, keyfile, keypass, handler_class):
+def start_server(address, port, certfile, keyfile, keypass, handler_class, show_qrcode):
     family, addr = get_best_family(address, port)
     ShareServer.address_family = family
     with ShareServer(addr, handler_class) as server:
@@ -1384,7 +1384,16 @@ def start_server(address, port, certfile, keyfile, keypass, handler_class):
             ip = get_ip(family)
         if family == socket.AF_INET6:
             ip = f'[{ip}]'
-        sys.stderr.write(f'Serving {"HTTPS" if https else "HTTP"} on {host} port {port} ({"https" if https else "http"}://{ip}:{port}/) ...\n')
+        url = f'{"https" if https else "http"}://{ip}:{port}/'
+        sys.stderr.write(f'Serving {"HTTPS" if https else "HTTP"} on {host} port {port} ({url}) ...\n')
+        if show_qrcode and sys.stderr.isatty():
+            try:
+                import qrcode
+                qr = qrcode.QRCode()
+                qr.add_data(url)
+                qr.print_tty(sys.stderr)
+            except ModuleNotFoundError:
+                pass
         server.serve_forever()
 
 
@@ -1403,6 +1412,7 @@ def main():
     general.add_argument('-z', '--archive', action='store_true', help='share the directory itself as an archive, only for directory')
     general.add_argument('-t', '--text', action='store_true', help='for text')
     general.add_argument('-P', '--password', nargs='?', const=os.getenv('SHARE_PASSWORD'), help='access password, if no PASSWORD is specified, the environment variable SHARE_PASSWORD will be used')
+    general.add_argument('-q', '--qrcode', action='store_true', help='show the qrcode')
     general.add_argument('-h', '--help', action='help', help='show this help message and exit')
 
     tls = parser.add_argument_group('tls options')
@@ -1464,7 +1474,7 @@ def main():
             else:
                 raise FileNotFoundError(f'{args.arguments[0]} is not a directory')
             handler_class = functools.partial(FileReceiveHandler, dir_path, password=args.password)
-    start_server(args.address, args.port, args.certfile, args.keyfile, args.keypass, handler_class)
+    start_server(args.address, args.port, args.certfile, args.keyfile, args.keypass, handler_class, args.qrcode)
 
 
 main()
