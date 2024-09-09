@@ -1079,6 +1079,7 @@ window.onload = on_load;
         text = self.rfile.read(content_length - 5).decode()
         text = parse.unquote_plus(text)
         self.respond_redirect('/')
+        print(f'From {self.client_address[0]}:{self.client_address[1]}:')
         print(text)
 
 
