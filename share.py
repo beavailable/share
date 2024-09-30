@@ -1368,6 +1368,20 @@ def create_ssl_context(certfile, keyfile=None, password=None):
     return ctx
 
 
+def print_qrcode(text):
+    if sys.stderr.isatty():
+        try:
+            import qrcode
+            qr = qrcode.QRCode()
+            qr.add_data(text)
+            if is_windows():
+                qr.print_ascii(sys.stderr, False, True)
+            else:
+                qr.print_tty(sys.stderr)
+        except ModuleNotFoundError:
+            pass
+
+
 def start_server(address, port, certfile, keyfile, keypass, handler_class, show_qrcode):
     family, addr = get_best_family(address, port)
     ShareServer.address_family = family
@@ -1386,17 +1400,8 @@ def start_server(address, port, certfile, keyfile, keypass, handler_class, show_
             ip = f'[{ip}]'
         url = f'{"https" if https else "http"}://{ip}:{port}/'
         sys.stderr.write(f'Serving {"HTTPS" if https else "HTTP"} on {host} port {port} ({url}) ...\n')
-        if show_qrcode and sys.stderr.isatty():
-            try:
-                import qrcode
-                qr = qrcode.QRCode()
-                qr.add_data(url)
-                if is_windows():
-                    qr.print_ascii(sys.stderr, False, True)
-                else:
-                    qr.print_tty(sys.stderr)
-            except ModuleNotFoundError:
-                pass
+        if show_qrcode:
+            print_qrcode(url)
         server.serve_forever()
 
 
