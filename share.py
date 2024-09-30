@@ -1391,7 +1391,10 @@ def start_server(address, port, certfile, keyfile, keypass, handler_class, show_
                 import qrcode
                 qr = qrcode.QRCode()
                 qr.add_data(url)
-                qr.print_tty(sys.stderr)
+                if is_windows():
+                    qr.print_ascii(sys.stderr, False, True)
+                else:
+                    qr.print_tty(sys.stderr)
             except ModuleNotFoundError:
                 pass
         server.serve_forever()
