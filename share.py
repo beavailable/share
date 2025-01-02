@@ -78,11 +78,7 @@ class BaseHandler(BaseHTTPRequestHandler):
         if self._path_only != '/':
             self.respond_redirect(f'/?returnUrl={self.path}')
             return
-        last_modified = self.start_time
-        if self.get_if_modified_since() == last_modified:
-            self.respond_not_modified(last_modified)
-        else:
-            self.respond_for_html(self._build_html_for_password(), last_modified)
+        self.respond_for_html(self._build_html_for_password())
 
     def do_POST(self):
         self._split_path()
