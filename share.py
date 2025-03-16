@@ -777,25 +777,14 @@ class DirectoryShareHandler(BaseFileShareHandler):
                 self.respond_redirect(self._path_only + '/')
                 return
             try:
-                last_modified = max(time.gmtime(os.stat(full_path).st_mtime), self.start_time)
+                dirs, files = self.list_dir(full_path)
             except PermissionError:
                 self.respond_forbidden()
                 return
             except FileNotFoundError:
                 self.respond_not_found()
                 return
-            if self.get_if_modified_since() == last_modified:
-                self.respond_not_modified(last_modified)
-            else:
-                try:
-                    dirs, files = self.list_dir(full_path)
-                except PermissionError:
-                    self.respond_forbidden()
-                    return
-                except FileNotFoundError:
-                    self.respond_not_found()
-                    return
-                self.respond_for_html(self.build_html(self._path_only, dirs, files), last_modified)
+            self.respond_for_html(self.build_html(self._path_only, dirs, files))
             return
         if os.path.isfile(full_path):
             self.respond_for_file(full_path)
