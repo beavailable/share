@@ -56,7 +56,6 @@ class BaseHandler(BaseHTTPRequestHandler):
         self._hostname = socket.gethostname()
         self._password = password
         self._compressor = None
-        self._ua_prefixes = {'curl', 'Wget', 'wget2', 'aria2', 'Axel'}
         super().__init__(*args)
 
     def init_compressor(self):
@@ -299,13 +298,6 @@ class BaseHandler(BaseHTTPRequestHandler):
             queries[key] = value
         self._path_only, self._queries = collapsed_path, queries
 
-    def _is_from_commandline(self):
-        ua = self.headers['User-Agent']
-        if not ua:
-            return False
-        prefix = ua.split('/', 1)[0]
-        return prefix in self._ua_prefixes
-
     def _guess_type(self, path):
         guess, _ = mimetypes.guess_type(path)
         if not guess:
@@ -377,7 +369,7 @@ class BaseHandler(BaseHTTPRequestHandler):
         self.respond(HTTPStatus.OK, content_type='text/html; charset=utf-8', content_length=content_length, last_modified=last_modified, content_encoding=content_encoding)
         self.wfile.write(html)
 
-    def respond_for_file(self, file):
+    def respond_for_file(self, file, send_content_disposition=False):
         if file == 'favicon.ico':
             filename = 'favicon.ico'
             filesize = len(self.ico)
@@ -429,7 +421,7 @@ class BaseHandler(BaseHTTPRequestHandler):
                 compress = False
                 transfer_encoding = None
                 content_encoding = None
-            if self._is_from_commandline():
+            if send_content_disposition:
                 content_disposition = f'attachment; filename="{parse.quote(filename)}"'
             else:
                 content_disposition = None
@@ -465,11 +457,11 @@ class BaseFileShareHandler(BaseHandler):
             self.is_hidden = self._is_hidden_unix
         super().__init__(*args, **kwargs)
 
-    def respond_for_archive(self, dir_path):
+    def respond_for_archive(self, dir_path, send_content_disposition=False):
         if not self.init_compressor():
             self.respond_not_found()
             return
-        if self._is_from_commandline():
+        if send_content_disposition:
             if dir_path == '/':
                 filename = 'root.tar.zst'
             else:
@@ -711,7 +703,7 @@ class VirtualTarShareHandler(BaseFileShareHandler):
             return
         name = self._path_only[1:]
         if name == self._filename or name == 'file':
-            self.respond_for_archive(self._dir)
+            self.respond_for_archive(self._dir, name == 'file')
             return
         self.respond_not_found()
 
@@ -731,9 +723,12 @@ class FileShareHandler(BaseFileShareHandler):
             self.respond_for_html(self.build_html(self._path_only, dirs, files))
             return
         name = self._path_only[1:]
-        file_path = self.get_file(name)
+        file_path = self._find_file(name)
         if file_path:
             self.respond_for_file(file_path)
+            return
+        if len(self._files) == 1 and name == 'file':
+            self.respond_for_file(self._files[0], True)
             return
         self.respond_not_found()
 
@@ -745,14 +740,6 @@ class FileShareHandler(BaseFileShareHandler):
             except Exception:
                 pass
         return (dirs, files)
-
-    def get_file(self, name):
-        f = self._find_file(name)
-        if f:
-            return f
-        if len(self._files) == 1 and name == 'file':
-            return self._files[0]
-        return None
 
     def _find_file(self, name):
         for f in self._files:
