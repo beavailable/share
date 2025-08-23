@@ -1,0 +1,29 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - '*'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: pip install zstandard qrcode
+      - uses: Nuitka/Nuitka-Action@main
+        with:
+          nuitka-version: main
+          script-name: share.py
+          windows-icon-from-ico: windows/favicon.ico
+          file-version: ${{ github.ref_name }}
+          product-version: ${{ github.ref_name }}
+      - uses: ncipollo/release-action@v1
+        with:
+          generateReleaseNotes: true
+          artifacts: 'build/share.exe'
