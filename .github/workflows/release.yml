@@ -20,6 +20,8 @@ jobs:
       - name: Install Dependencies
         run: pip install zstandard qrcode
       - name: Build
+        env:
+          CCFLAGS: -Os
         uses: Nuitka/Nuitka-Action@main
         with:
           nuitka-version: main
