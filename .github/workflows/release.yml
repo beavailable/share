@@ -6,18 +6,21 @@ on:
       - '*'
 
 jobs:
-  build-and-release:
-    runs-on: windows-latest
-    permissions:
-      contents: write
+  build:
+    strategy:
+      matrix:
+        os: [windows-latest, windows-11-arm]
+    runs-on: ${{ matrix.os }}
     steps:
+      - name: Set up environment variables
+        run: echo "ARCH=$($env:RUNNER_ARCH.ToLower())" >>"$env:GITHUB_ENV"
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Install Python
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
-      - name: Install Dependencies
+          python-version: 3.13
+      - name: Install dependencies
         run: pip install zstandard qrcode
       - name: Build
         env:
@@ -29,8 +32,25 @@ jobs:
           windows-icon-from-ico: windows/favicon.ico
           file-version: ${{ github.ref_name }}
           product-version: ${{ github.ref_name }}
-      - name: Release
-        uses: ncipollo/release-action@v1
+          output-file: share-${{ env.ARCH }}.exe
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
         with:
-          generateReleaseNotes: true
-          artifacts: 'build/share.exe'
+          name: share-${{ env.ARCH }}
+          path: build/share-${{ env.ARCH }}.exe
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v5
+        with:
+          merge-multiple: true
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: share-*.exe
+          fail_on_unmatched_files: true
+          generate_release_notes: true
