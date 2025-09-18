@@ -56,6 +56,7 @@ class BaseHandler(BaseHTTPRequestHandler):
         self._hostname = socket.gethostname()
         self._password = password
         self._compressor = None
+        self._should_log_time = True if os.getenv('SHARE_LOG_TIME', 'true') == 'true' else False
         super().__init__(*args)
 
     def init_compressor(self):
@@ -441,10 +442,12 @@ class BaseHandler(BaseHTTPRequestHandler):
         self.log_message('%s %d %s', self.command, code, parse.unquote(self.path))
 
     def log_message(self, format, *args):
-        year, month, day, hh, mm, ss, x, y, z = time.localtime()
-        t = f'{year:04}/{month:02}/{day:02} {hh:02}:{mm:02}:{ss:02}'
         message = format % args
-        sys.stderr.write('%s - %s:%s - %s\n' % (t, self.client_address[0], self.client_address[1], message.translate(self._control_char_table)))
+        if self._should_log_time:
+            t = time.strftime('%Y/%m/%d %H:%M:%S - ', time.localtime())
+        else:
+            t = ''
+        sys.stderr.write(f'{t}{self.client_address[0]}:{self.client_address[1]} - {message.translate(self._control_char_table)}\n')
 
 
 class BaseFileShareHandler(BaseHandler):
