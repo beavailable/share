@@ -8,8 +8,8 @@ This is a command-line file sharing tool, which has just a single file and is ea
 - Range request support
 - Password sharing
 - TLS support
-- Zstd compression support (requires [python-zstandard](https://github.com/indygreg/python-zstandard) library, but is optional)
-- QR code support (requires [python-qrcode](https://github.com/lincolnloop/python-qrcode) library, but is optional)
+- Zstd compression support (requires [python-zstandard](https://github.com/indygreg/python-zstandard), but is optional and not needed on Python 3.14+)
+- QR code support (requires [python-qrcode](https://github.com/lincolnloop/python-qrcode), but is optional)
 
 # Usage
 ```

@@ -23,6 +23,44 @@ class ShareServer(ThreadingHTTPServer):
     pass
 
 
+class ZstdAdapter:
+
+    def compress(self, data):
+        raise NotImplementedError
+
+    def get_writer(self):
+        raise NotImplementedError
+
+
+class InternalZstdAdapter(ZstdAdapter):
+
+    def __init__(self):
+        from compression import zstd
+
+        self._zstd = zstd
+        self._options = {zstd.CompressionParameter.checksum_flag: True}
+
+    def compress(self, data):
+        return self._zstd.compress(data, options=self._options)
+
+    def get_writer(self, file):
+        return self._zstd.open(file, 'wb', options=self._options)
+
+
+class ExnternalZstdAdapter(ZstdAdapter):
+
+    def __init__(self):
+        import zstandard
+
+        self._zstd = zstandard.ZstdCompressor(write_checksum=True)
+
+    def compress(self, data):
+        return self._zstd.compress(data)
+
+    def get_writer(self, file):
+        return self._zstd.stream_writer(file, write_return_read=True, closefd=False)
+
+
 class BaseHandler(BaseHTTPRequestHandler):
 
     protocol_version = 'HTTP/1.1'
@@ -37,20 +75,15 @@ class BaseHandler(BaseHTTPRequestHandler):
     def __init__(self, *args, password=None):
         self._hostname = socket.gethostname()
         self._password = password
-        self._compressor = None
+        if sys.version_info >= (3, 14):
+            self._zstd = InternalZstdAdapter()
+        else:
+            try:
+                self._zstd = ExnternalZstdAdapter()
+            except Exception:
+                self._zstd = None
         self._should_log_time = True if os.getenv('SHARE_LOG_TIME', 'true') == 'true' else False
         super().__init__(*args)
-
-    def init_compressor(self):
-        if self._compressor:
-            return True
-        try:
-            import zstandard as zstd
-
-            self._compressor = zstd.ZstdCompressor(write_checksum=True)
-            return True
-        except ModuleNotFoundError:
-            return False
 
     def do_GET(self):
         try:
@@ -383,8 +416,8 @@ class BaseHandler(BaseHTTPRequestHandler):
         self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR)
 
     def respond_for_html(self, html, last_modified=None):
-        if len(html) >= 1024 and 'zstd' in self.get_accept_encoding() and self.init_compressor():
-            html = self._compressor.compress(html)
+        if len(html) >= 1024 and 'zstd' in self.get_accept_encoding() and self._zstd:
+            html = self._zstd.compress(html)
             content_length = len(html)
             content_encoding = 'zstd'
         else:
@@ -447,7 +480,7 @@ class BaseHandler(BaseHTTPRequestHandler):
                 status == HTTPStatus.OK
                 and content_length >= 1024
                 and 'zstd' in self.get_accept_encoding()
-                and self.init_compressor()
+                and self._zstd
             ):
                 compress = True
                 content_length = None
@@ -477,14 +510,16 @@ class BaseHandler(BaseHTTPRequestHandler):
                 f.seek(start)
             if compress:
                 with ChunkWriter(self.wfile) as writer:
-                    self._compressor.copy_stream(
-                        f, writer, filesize, read_size=65536, write_size=65544
-                    )
+                    with self._zstd.get_writer(writer) as w:
+                        self.copy_stream(f, w, filesize)
             else:
-                while content_length:
-                    l = min(content_length, 65536)
-                    self.wfile.write(f.read(l))
-                    content_length -= l
+                self.copy_stream(f, self.wfile, content_length)
+
+    def copy_stream(self, reader, writer, size):
+        while size:
+            l = min(size, 65536)
+            writer.write(reader.read(l))
+            size -= l
 
     def log_request(self, code, size=None):
         self.log_message('%s %d %s', self.command, code, parse.unquote(self.path))
@@ -511,7 +546,7 @@ class BaseFileShareHandler(BaseHandler):
         super().__init__(*args, **kwargs)
 
     def respond_for_archive(self, dir_path, send_content_disposition=False):
-        if not self.init_compressor():
+        if not self._zstd:
             self.respond_not_found()
             return
         if send_content_disposition:
@@ -528,9 +563,10 @@ class BaseFileShareHandler(BaseHandler):
             transfer_encoding='chunked',
             content_disposition=content_disposition,
         )
-        with self._compressor.stream_writer(ChunkWriter(self.wfile), write_size=65544) as writer:
-            with tarfile.open(None, 'w|', writer, 65536) as tar:
-                self.archive_folder(dir_path, '', tar)
+        with ChunkWriter(self.wfile) as writer:
+            with self._zstd.get_writer(writer) as w:
+                with tarfile.open(None, 'w|', w, 65536) as tar:
+                    self.archive_folder(dir_path, '', tar)
 
     def archive_folder(self, dir_path, arcname, tar):
         for name in sorted(os.listdir(dir_path)):
