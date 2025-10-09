@@ -28,7 +28,7 @@ class ZstdAdapter:
     def compress(self, data):
         raise NotImplementedError
 
-    def get_writer(self):
+    def get_writer(self, file):
         raise NotImplementedError
 
 
