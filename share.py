@@ -1549,7 +1549,7 @@ def main():
 
     general = parser.add_argument_group('general options')
     general.add_argument(
-        '-b', '--bind', dest='address', help='bind address [default: all interfaces]'
+        '-b', '--bind', dest='address', default='0.0.0.0', help='bind address [default: 0.0.0.0]'
     )
     general.add_argument('-p', '--port', type=int, default=8888, help='port [default: 8888]')
     general.add_argument('-s', '--share', action='store_true', help='share mode (default mode)')
