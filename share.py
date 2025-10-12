@@ -1280,10 +1280,20 @@ class HtmlBuilder:
 
 class FileItem:
 
+    _name_part_pattern = re.compile(r'(0*\D+)|((0*)\d+)', re.ASCII)
+
     def __init__(self, name, hidden, size):
         self.name = name
         self.hidden = hidden
         self.size = size
+        self._name_parts = [
+            (
+                string.lower() if string else number,
+                int(number) if number else None,
+                len(zeros),
+            )
+            for string, number, zeros in self._name_part_pattern.findall(name)
+        ]
 
     def __lt__(self, other):
         if self.hidden != other.hidden:
@@ -1293,35 +1303,33 @@ class FileItem:
             return True
         if name1[0] != '.' and name2[0] == '.':
             return False
-        len1, len2 = len(name1), len(name2)
+        len1, len2 = len(self._name_parts), len(other._name_parts)
         i, min_len = 0, min(len1, len2)
         while i < min_len:
-            ch1, ch2 = ord(name1[i]), ord(name2[i])
-            if 65 <= ch1 <= 90:
-                ch1 += 32
-            if 65 <= ch2 <= 90:
-                ch2 += 32
-            if 49 <= ch1 <= 57 and 49 <= ch2 <= 57:
-                num1, idx1 = self._check_number(name1, len1, i)
-                num2, idx2 = self._check_number(name2, len2, i)
-                if num1 != num2:
-                    return num1 < num2
-                i = idx1
-            elif ch1 == ch2:
+            string1, number1, leading_zeros1 = self._name_parts[i]
+            string2, number2, leading_zeros2 = other._name_parts[i]
+            if number1 is not None and number2 is not None:
+                if leading_zeros1 != leading_zeros2:
+                    return leading_zeros1 > leading_zeros2
+                if number1 == number2:
+                    i += 1
+                else:
+                    return number1 < number2
+            elif string1 == string2:
                 i += 1
             else:
-                return ch1 < ch2
-        return len1 < len2
-
-    def _check_number(self, s, n, start):
-        num, end = 0, start
-        while end < n:
-            ch = ord(s[end])
-            if ch < 48 or ch > 57:
-                break
-            num = num * 10 + ch - 48
-            end += 1
-        return (num, end)
+                slen1, slen2 = len(string1), len(string2)
+                if slen1 == slen2:
+                    return string1 < string2
+                if slen1 < slen2 and i < len1 - 1:
+                    string1 += self._name_parts[i + 1][0]
+                if slen1 > slen2 and i < len2 - 1:
+                    string2 += other._name_parts[i + 1][0]
+                return string1 < string2
+        if len1 == len2:
+            return name1 < name2
+        else:
+            return len1 < len2
 
 
 class MultipartParser:
