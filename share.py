@@ -1280,19 +1280,15 @@ class HtmlBuilder:
 
 class FileItem:
 
-    _name_part_pattern = re.compile(r'(0*\D+)|((0*)\d+)', re.ASCII)
+    _name_part_pattern = re.compile(r'([0\D]+)|([1-9]\d*)', re.ASCII)
 
     def __init__(self, name, hidden, size):
         self.name = name
         self.hidden = hidden
         self.size = size
         self._name_parts = [
-            (
-                string.lower() if string else number,
-                int(number) if number else None,
-                len(zeros),
-            )
-            for string, number, zeros in self._name_part_pattern.findall(name)
+            (string if string else number, int(number) if number else None)
+            for string, number in self._name_part_pattern.findall(name.lower())
         ]
 
     def __lt__(self, other):
@@ -1306,11 +1302,9 @@ class FileItem:
         len1, len2 = len(self._name_parts), len(other._name_parts)
         i, min_len = 0, min(len1, len2)
         while i < min_len:
-            string1, number1, leading_zeros1 = self._name_parts[i]
-            string2, number2, leading_zeros2 = other._name_parts[i]
+            string1, number1 = self._name_parts[i]
+            string2, number2 = other._name_parts[i]
             if number1 is not None and number2 is not None:
-                if leading_zeros1 != leading_zeros2:
-                    return leading_zeros1 > leading_zeros2
                 if number1 == number2:
                     i += 1
                 else:
@@ -1319,8 +1313,6 @@ class FileItem:
                 i += 1
             else:
                 slen1, slen2 = len(string1), len(string2)
-                if slen1 == slen2:
-                    return string1 < string2
                 if slen1 < slen2 and i < len1 - 1:
                     string1 += self._name_parts[i + 1][0]
                 if slen1 > slen2 and i < len2 - 1:
