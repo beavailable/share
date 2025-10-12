@@ -1326,6 +1326,8 @@ class FileItem:
 
 class MultipartParser:
 
+    _content_dispositon_pattern = re.compile(r'^form-data; name="(.+)"; filename="(.+)"\r\n$')
+
     def __init__(self, stream, boundary, content_length):
         self._stream = stream
         self._total_length = content_length
@@ -1333,9 +1335,6 @@ class MultipartParser:
         self._separator = f'--{boundary}\r\n'.encode()
         self._terminator = f'--{boundary}--\r\n'.encode()
         self._state = MultipartState.INIT
-        self._content_dispositon_pattern = re.compile(
-            r'^form-data; name="(.+)"; filename="(.+)"\r\n$'
-        )
         self._name = None
         self._filename = None
 
