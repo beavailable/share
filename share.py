@@ -569,26 +569,24 @@ class BaseFileShareHandler(BaseHandler):
                     self.archive_folder(dir_path, '', tar)
 
     def archive_folder(self, dir_path, arcname, tar):
-        for name in sorted(os.listdir(dir_path)):
-            full_path = dir_path.rstrip('/') + '/' + name
-            if not self.archive_filter(full_path):
-                continue
-            tarinfo = tar.gettarinfo(full_path, arcname + '/' + name)
-            if not tarinfo:
-                continue
-            try:
-                if tarinfo.isdir():
-                    tar.addfile(tarinfo)
-                    self.archive_folder(full_path, arcname + '/' + name, tar)
-                elif tarinfo.isfile():
-                    with open(full_path, 'rb') as f:
-                        tar.addfile(tarinfo, f)
-                else:
-                    tar.addfile(tarinfo)
-            except (PermissionError, FileNotFoundError):
-                continue
+        with os.scandir(dir_path) as it:
+            for entry in it:
+                try:
+                    if self.file_filter(entry.path):
+                        tarinfo = tar.gettarinfo(entry.path, arcname + '/' + entry.name)
+                        if tarinfo:
+                            if tarinfo.isdir():
+                                tar.addfile(tarinfo)
+                                self.archive_folder(entry.path, arcname + '/' + entry.name, tar)
+                            elif tarinfo.isfile():
+                                with open(entry.path, 'rb') as f:
+                                    tar.addfile(tarinfo, f)
+                            else:
+                                tar.addfile(tarinfo)
+                except (PermissionError, FileNotFoundError):
+                    pass
 
-    def archive_filter(self, path):
+    def file_filter(self, file_path):
         raise NotImplementedError
 
     def build_html(self, path, dirs, files):
@@ -834,8 +832,8 @@ class VirtualTarShareHandler(BaseFileShareHandler):
             return
         self.respond_not_found()
 
-    def archive_filter(self, path):
-        return self._all or not self.is_hidden(path)
+    def file_filter(self, file_path):
+        return self._all or not self.is_hidden(file_path)
 
 
 class FileShareHandler(BaseFileShareHandler):
@@ -922,19 +920,20 @@ class DirectoryShareHandler(BaseFileShareHandler):
         if not dir_path.endswith('/'):
             dir_path = dir_path + '/'
         dirs, files = [], []
-        for name in os.listdir(dir_path):
-            full_path = dir_path + name
-            hidden = self.is_hidden(full_path)
-            if self._all or not hidden:
-                if os.path.isdir(full_path):
-                    dirs.append(FileItem(name, hidden, None))
-                else:
-                    size = 0
-                    try:
-                        size = os.path.getsize(full_path)
-                    except Exception:
-                        pass
-                    files.append(FileItem(name, hidden, size))
+        with os.scandir(dir_path) as it:
+            for entry in it:
+                try:
+                    if self.file_filter(entry.path):
+                        if entry.is_dir():
+                            dirs.append(FileItem(entry.name, self.is_hidden(entry.path), None))
+                        else:
+                            files.append(
+                                FileItem(
+                                    entry.name, self.is_hidden(entry.path), entry.stat().st_size
+                                )
+                            )
+                except (PermissionError, FileNotFoundError):
+                    pass
         return (sorted(dirs), sorted(files))
 
     def do_post(self):
@@ -951,8 +950,8 @@ class DirectoryShareHandler(BaseFileShareHandler):
         else:
             super().do_put()
 
-    def archive_filter(self, path):
-        return self._all or not self.is_hidden(path)
+    def file_filter(self, file_path):
+        return self._all or not self.is_hidden(file_path)
 
     def _contains_hidden_segment_windows(self, path):
         if path == '/':
