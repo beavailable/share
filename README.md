@@ -1,7 +1,7 @@
 # share
 This is a command-line file sharing tool, which has just a single file and is easy to use.
 
-# Features
+## Features
 - Crossing multiple platforms
 - Sharing directories, files and texts
 - Receiving files and texts
@@ -11,7 +11,7 @@ This is a command-line file sharing tool, which has just a single file and is ea
 - Zstd compression support (requires [python-zstandard](https://github.com/indygreg/python-zstandard), but is optional and not needed on Python 3.14+)
 - QR code support (requires [python-qrcode](https://github.com/lincolnloop/python-qrcode), but is optional)
 
-# Usage
+## Usage
 ```
 usage: share.py [-b ADDRESS] [-p PORT] [-s] [-r] [-a] [-z] [-t] [-P [PASSWORD]] [-q] [-h]
                 [--certfile CERTFILE] [--keyfile KEYFILE] [--keypass KEYPASS]
@@ -40,10 +40,10 @@ tls options:
   --keypass KEYPASS     key password
 ```
 
-# Screenshot
+## Screenshot
 ![img](https://github.com/beavailable/share/blob/main/screenshot.gif)
 
-# Tips
+## Tips
 - If you're sharing just one file, you can use the shortcut name `file` to access it：
     ```bash
     http://{host}:{port}/file
