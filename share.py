@@ -187,18 +187,12 @@ class BaseHandler(BaseHTTPRequestHandler):
         try:
             os.makedirs(save_dir, exist_ok=True)
             save_dir = save_dir.rstrip('/\\')
-            parser = MultipartParser(self.rfile, boundary, content_length)
-            while parser.has_next():
-                name = parser.next_name()
-                if name != 'file':
+            for mpfile in MultipartParser(self.rfile, boundary, content_length):
+                if mpfile.name != 'file':
                     self.respond_bad_request()
                     return
-                filename = parser.next_filename()
-                if not filename:
-                    self.respond_bad_request()
-                    return
-                with open(f'{save_dir}/{os.path.basename(filename)}', 'wb') as f:
-                    parser.write_next_to(f)
+                with open(f'{save_dir}/{os.path.basename(mpfile.filename)}', 'wb') as f:
+                    mpfile.write_to(f)
         except MultipartError:
             self.respond_bad_request()
         except PermissionError:
@@ -1323,75 +1317,22 @@ class FileItem:
             return len1 < len2
 
 
-class MultipartParser:
+class MultipartFile:
 
     _content_dispositon_pattern = re.compile(r'^form-data; name="(.+)"; filename="(.+)"\r\n$')
 
-    def __init__(self, stream, boundary, content_length):
-        self._stream = stream
-        self._total_length = content_length
-        self._read_length = 0
-        self._separator = f'--{boundary}\r\n'.encode()
-        self._terminator = f'--{boundary}--\r\n'.encode()
-        self._state = MultipartState.INIT
-        self._name = None
-        self._filename = None
-
-    def has_next(self):
-        if self._state == MultipartState.INIT:
-            if self._next_line() != self._separator:
-                raise MultipartError
-            self._state = MultipartState.HEADER_START
-        if self._state == MultipartState.HEADER_START:
-            self._parse_headers()
-            self._state = MultipartState.PART_START
-            return True
-        if self._state == MultipartState.END and self._read_length == self._total_length:
-            return False
-        raise MultipartError
-
-    def next_name(self):
-        if self._state != MultipartState.PART_START:
-            raise MultipartError
-        return self._name
-
-    def next_filename(self):
-        if self._state != MultipartState.PART_START:
-            raise MultipartError
-        return self._filename
-
-    def write_next_to(self, out):
-        if self._state != MultipartState.PART_START:
-            raise MultipartError
-        line, next = None, None
+    def __init__(self, parser):
+        self._parser = parser
+        self.name = None
+        self.filename = None
+        header_size = 0
         while True:
-            if not line:
-                line = self._next_line()
-            if len(line) >= 2 and line[-2:] == b'\r\n':
-                next = self._next_line()
-                if next == self._separator:
-                    if len(line) > 2:
-                        out.write(line[:-2])
-                    self._state = MultipartState.HEADER_START
-                    return
-                if next == self._terminator:
-                    if len(line) > 2:
-                        out.write(line[:-2])
-                    self._state = MultipartState.END
-                    return
-                out.write(line)
-                line = next
-            else:
-                out.write(line)
-                line = None
-
-    def _parse_headers(self):
-        self._name = None
-        self._filename = None
-        while True:
-            line = self._next_line().decode()
+            line = self._parser.read_line().decode()
             if line == '\r\n':
                 break
+            header_size += 1
+            if header_size > 100:
+                raise MultipartError
             parts = line.split(': ')
             if len(parts) != 2:
                 raise MultipartError
@@ -1400,12 +1341,53 @@ class MultipartParser:
                 match = self._content_dispositon_pattern.match(value)
                 if not match:
                     raise MultipartError
-                self._name = match.group(1)
-                self._filename = match.group(2)
-        if not self._name or not self._filename:
+                self.name = match.group(1)
+                self.filename = match.group(2)
+
+    def write_to(self, out):
+        line, next = None, None
+        while True:
+            if not line:
+                line = self._parser.read_line()
+            if len(line) >= 2 and line[-2:] == b'\r\n':
+                next = self._parser.read_line()
+                if self._parser.is_separator(next):
+                    if len(line) > 2:
+                        out.write(line[:-2])
+                    return
+                if self._parser.is_terminator(next):
+                    self._parser.set_terminated()
+                    if len(line) > 2:
+                        out.write(line[:-2])
+                    return
+                out.write(line)
+                line = next
+            else:
+                out.write(line)
+                line = None
+
+
+class MultipartParser:
+
+    def __init__(self, stream, boundary, content_length):
+        self._stream = stream
+        self._total_length = content_length
+        self._read_length = 0
+        self._separator = f'--{boundary}\r\n'.encode()
+        self._terminator = f'--{boundary}--\r\n'.encode()
+        self._terminated = False
+
+    def __iter__(self):
+        if self._read_length != 0:
+            raise MultipartError
+        if not self.is_separator(self.read_line()):
+            raise MultipartError
+        while not self._terminated:
+            yield MultipartFile(self)
+        if self._read_length != self._total_length:
             raise MultipartError
 
-    def _next_line(self):
+    def read_line(self):
         if self._read_length >= self._total_length:
             raise MultipartError
         l = min(65536, self._total_length - self._read_length)
@@ -1415,13 +1397,14 @@ class MultipartParser:
         self._read_length += len(line)
         return line
 
+    def is_separator(self, line):
+        return line == self._separator
 
-class MultipartState:
+    def is_terminator(self, line):
+        return line == self._terminator
 
-    INIT = 0
-    HEADER_START = 1
-    PART_START = 2
-    END = 3
+    def set_terminated(self):
+        self._terminated = True
 
 
 class MultipartError(ValueError):
