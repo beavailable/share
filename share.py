@@ -1319,7 +1319,7 @@ class FileItem:
 
 class MultipartFile:
 
-    _content_dispositon_pattern = re.compile(r'^form-data; name="(.+)"; filename="(.+)"\r\n$')
+    _content_disposition_pattern = re.compile(r'^form-data; name="(.+)"; filename="(.+)"\r\n$')
 
     def __init__(self, parser):
         self._parser = parser
@@ -1338,7 +1338,7 @@ class MultipartFile:
                 raise MultipartError
             key, value = parts
             if key == 'Content-Disposition':
-                match = self._content_dispositon_pattern.match(value)
+                match = self._content_disposition_pattern.match(value)
                 if not match:
                     raise MultipartError
                 self.name = match.group(1)
