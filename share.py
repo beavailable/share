@@ -1323,26 +1323,25 @@ class MultipartFile:
 
     def __init__(self, parser):
         self._parser = parser
-        self.name = None
-        self.filename = None
-        header_size = 0
+        headers = {}
         while True:
-            line = self._parser.read_line().decode()
+            line = parser.read_line().decode()
             if line == '\r\n':
                 break
-            header_size += 1
-            if header_size > 100:
-                raise MultipartError
             parts = line.split(': ')
             if len(parts) != 2:
                 raise MultipartError
-            key, value = parts
-            if key == 'Content-Disposition':
-                match = self._content_disposition_pattern.match(value)
-                if not match:
-                    raise MultipartError
-                self.name = match.group(1)
-                self.filename = match.group(2)
+            headers[parts[0]] = parts[1]
+            if len(headers) > 100:
+                raise MultipartError
+        content_disposition = headers.get('Content-Disposition')
+        if not content_disposition:
+            raise MultipartError
+        match = self._content_disposition_pattern.match(content_disposition)
+        if not match:
+            raise MultipartError
+        self.name = match.group(1)
+        self.filename = match.group(2)
 
     def write_to(self, out):
         line, next = None, None
