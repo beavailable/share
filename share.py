@@ -1386,6 +1386,13 @@ class MultipartParser:
         while True:
             if not line:
                 line = self._read_line()
+            if line.endswith(b'\r'):
+                next = self._read_line()
+                if next != b'\n':
+                    out.write(line)
+                    line = next
+                    continue
+                line += next
             if line.endswith(b'\r\n'):
                 next = self._read_line()
                 if next == self._separator:
@@ -1399,9 +1406,9 @@ class MultipartParser:
                     return
                 out.write(line)
                 line = next
-            else:
-                out.write(line)
-                line = None
+                continue
+            out.write(line)
+            line = None
 
 
 class MultipartError(ValueError):
