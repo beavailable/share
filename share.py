@@ -187,12 +187,12 @@ class BaseHandler(BaseHTTPRequestHandler):
         try:
             os.makedirs(save_dir, exist_ok=True)
             save_dir = save_dir.rstrip('/\\')
-            for mpfile in MultipartParser(self.rfile, boundary, content_length):
-                if mpfile.name != 'file':
+            for mf in MultipartParser(self.rfile, boundary, content_length):
+                if mf.name != 'file':
                     self.respond_bad_request()
                     return
-                with open(f'{save_dir}/{os.path.basename(mpfile.filename)}', 'wb') as f:
-                    mpfile.write_to(f)
+                with open(f'{save_dir}/{mf.filename}', 'wb') as f:
+                    mf.transfer_to(f)
         except MultipartError:
             self.respond_bad_request()
         except PermissionError:
@@ -1319,21 +1319,10 @@ class FileItem:
 
 class MultipartFile:
 
-    _content_disposition_pattern = re.compile(r'^form-data; name="(.+)"; filename="(.+)"\r\n$')
+    _content_disposition_pattern = re.compile(r'^form-data; name="(.+)"; filename="(.+)"$')
 
-    def __init__(self, parser):
-        self._parser = parser
-        headers = {}
-        while True:
-            line = parser.read_line().decode()
-            if line == '\r\n':
-                break
-            parts = line.split(': ')
-            if len(parts) != 2:
-                raise MultipartError
-            headers[parts[0]] = parts[1]
-            if len(headers) > 100:
-                raise MultipartError
+    def __init__(self, headers, transfer_to):
+        self.transfer_to = transfer_to
         content_disposition = headers.get('Content-Disposition')
         if not content_disposition:
             raise MultipartError
@@ -1341,29 +1330,7 @@ class MultipartFile:
         if not match:
             raise MultipartError
         self.name = match.group(1)
-        self.filename = match.group(2)
-
-    def write_to(self, out):
-        line, next = None, None
-        while True:
-            if not line:
-                line = self._parser.read_line()
-            if len(line) >= 2 and line[-2:] == b'\r\n':
-                next = self._parser.read_line()
-                if self._parser.is_separator(next):
-                    if len(line) > 2:
-                        out.write(line[:-2])
-                    return
-                if self._parser.is_terminator(next):
-                    self._parser.set_terminated()
-                    if len(line) > 2:
-                        out.write(line[:-2])
-                    return
-                out.write(line)
-                line = next
-            else:
-                out.write(line)
-                line = None
+        self.filename = os.path.basename(match.group(2))
 
 
 class MultipartParser:
@@ -1379,14 +1346,14 @@ class MultipartParser:
     def __iter__(self):
         if self._read_length != 0:
             raise MultipartError
-        if not self.is_separator(self.read_line()):
+        if self._read_line() != self._separator:
             raise MultipartError
         while not self._terminated:
-            yield MultipartFile(self)
+            yield MultipartFile(self._read_headers(), self._transfer_to)
         if self._read_length != self._total_length:
             raise MultipartError
 
-    def read_line(self):
+    def _read_line(self):
         if self._read_length >= self._total_length:
             raise MultipartError
         l = min(65536, self._total_length - self._read_length)
@@ -1396,14 +1363,45 @@ class MultipartParser:
         self._read_length += len(line)
         return line
 
-    def is_separator(self, line):
-        return line == self._separator
+    def _read_headers(self):
+        headers = {}
+        while True:
+            line = self._read_line().decode()
+            if line == '\r\n':
+                break
+            if line.endswith('\r\n'):
+                line = line[:-2]
+            elif line.endswith('\n'):
+                line = line[:-1]
+            parts = line.split(': ')
+            if len(parts) != 2:
+                raise MultipartError
+            headers[parts[0]] = parts[1]
+            if len(headers) > 100:
+                raise MultipartError
+        return headers
 
-    def is_terminator(self, line):
-        return line == self._terminator
-
-    def set_terminated(self):
-        self._terminated = True
+    def _transfer_to(self, out):
+        line, next = None, None
+        while True:
+            if not line:
+                line = self._read_line()
+            if line.endswith(b'\r\n'):
+                next = self._read_line()
+                if next == self._separator:
+                    if len(line) > 2:
+                        out.write(line[:-2])
+                    return
+                if next == self._terminator:
+                    self._terminated = True
+                    if len(line) > 2:
+                        out.write(line[:-2])
+                    return
+                out.write(line)
+                line = next
+            else:
+                out.write(line)
+                line = None
 
 
 class MultipartError(ValueError):
@@ -1522,7 +1520,6 @@ def start_server(address, port, certfile, keyfile, keypass, handler_class, show_
 
 
 def main():
-    sys.tracebacklimit = 0
     signal.signal(signal.SIGINT, on_interrupt)
     parser = argparse.ArgumentParser(allow_abbrev=False, add_help=False)
     parser.add_argument('arguments', nargs='*', help='a directory, files or texts')
