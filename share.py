@@ -1600,9 +1600,9 @@ def main():
         else:
             dir_path, files = None, None
             if not args.arguments:
-                dir_path = os.getcwd()
+                dir_path = os.path.abspath(os.getcwd())
             elif os.path.isdir(args.arguments[0]):
-                dir_path = args.arguments[0]
+                dir_path = os.path.abspath(args.arguments[0])
             else:
                 for f in args.arguments:
                     if not os.path.isfile(f):
