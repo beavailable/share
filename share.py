@@ -1607,7 +1607,7 @@ def main():
                 for f in args.arguments:
                     if not os.path.isfile(f):
                         raise FileNotFoundError(f'{f} is not a file')
-                files = [os.path.realpath(f) for f in args.arguments]
+                files = [os.path.abspath(f) for f in args.arguments]
             if dir_path:
                 if args.archive:
                     handler_class = functools.partial(
