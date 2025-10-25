@@ -1579,9 +1579,9 @@ def main():
     if args.share and args.receive:
         dir_path = None
         if not args.arguments:
-            dir_path = os.getcwd()
+            dir_path = os.path.abspath(os.getcwd())
         elif os.path.isdir(args.arguments[0]):
-            dir_path = args.arguments[0]
+            dir_path = os.path.abspath(args.arguments[0])
         else:
             raise FileNotFoundError(f'{args.arguments[0]} is not a directory')
         handler_class = functools.partial(
@@ -1625,9 +1625,9 @@ def main():
         else:
             dir_path = None
             if not args.arguments:
-                dir_path = os.getcwd()
+                dir_path = os.path.abspath(os.getcwd())
             elif os.path.isdir(args.arguments[0]):
-                dir_path = args.arguments[0]
+                dir_path = os.path.abspath(args.arguments[0])
             else:
                 raise FileNotFoundError(f'{args.arguments[0]} is not a directory')
             handler_class = functools.partial(FileReceiveHandler, dir_path, password=args.password)
