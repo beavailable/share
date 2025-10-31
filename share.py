@@ -85,60 +85,55 @@ class BaseHandler(BaseHTTPRequestHandler):
         self._should_log_time = True if os.getenv('SHARE_LOG_TIME', 'true') == 'true' else False
         super().__init__(*args)
 
-    def do_GET(self):
+    def handle_one_request(self):
         try:
-            self._split_path()
-            if self._path_only == '/favicon.ico':
-                self.respond_for_file('favicon.ico')
-                return
-            if not self._password or self._validate_password():
-                self.do_get()
-                return
-            if self._path_only != '/':
-                self.respond_redirect(f'/?returnUrl={self.path}')
-                return
-            self.respond_for_html(self._build_html_for_password())
+            super().handle_one_request()
         except Exception as e:
             self.close_connection = True
             self.log_message(f'{type(e).__name__}{': ' + str(e) if e.args else ''}')
+
+    def do_GET(self):
+        self._split_path()
+        if self._path_only == '/favicon.ico':
+            self.respond_for_file('favicon.ico')
+            return
+        if not self._password or self._validate_password():
+            self.do_get()
+            return
+        if self._path_only != '/':
+            self.respond_redirect(f'/?returnUrl={self.path}')
+            return
+        self.respond_for_html(self._build_html_for_password())
 
     def do_POST(self):
-        try:
-            self._split_path()
-            if not self._password or self._validate_password():
-                self.do_post()
-                return
-            content_length = self.get_content_length()
-            if not content_length or content_length > 100:
-                self.respond_bad_request()
-                return
-            data = self.rfile.read(content_length).decode()
-            data = parse.unquote_plus(data)
-            password, _, remember_device = data.partition('&')
-            if password == f'password={self._password}':
-                cookie = f'password={parse.quote_plus(self._password)}; path=/'
-                if remember_device == 'remember_device=on':
-                    cookie += '; max-age=31536000'
-                cookie += '; HttpOnly'
-                redirect_url = parse.quote(self._queries.get('returnUrl', self._path_only))
-            else:
-                cookie = None
-                redirect_url = self.path
-            self.respond_redirect(redirect_url, cookie)
-        except Exception as e:
-            self.close_connection = True
-            self.log_message(f'{type(e).__name__}{': ' + str(e) if e.args else ''}')
+        self._split_path()
+        if not self._password or self._validate_password():
+            self.do_post()
+            return
+        content_length = self.get_content_length()
+        if not content_length or content_length > 100:
+            self.respond_bad_request()
+            return
+        data = self.rfile.read(content_length).decode()
+        data = parse.unquote_plus(data)
+        password, _, remember_device = data.partition('&')
+        if password == f'password={self._password}':
+            cookie = f'password={parse.quote_plus(self._password)}; path=/'
+            if remember_device == 'remember_device=on':
+                cookie += '; max-age=31536000'
+            cookie += '; HttpOnly'
+            redirect_url = parse.quote(self._queries.get('returnUrl', self._path_only))
+        else:
+            cookie = None
+            redirect_url = self.path
+        self.respond_redirect(redirect_url, cookie)
 
     def do_PUT(self):
-        try:
-            self._split_path()
-            if not self._password or self._validate_password():
-                self.do_put()
-                return
-            self.respond_unauthorized()
-        except Exception as e:
-            self.close_connection = True
-            self.log_message(f'{type(e).__name__}{': ' + str(e) if e.args else ''}')
+        self._split_path()
+        if not self._password or self._validate_password():
+            self.do_put()
+            return
+        self.respond_unauthorized()
 
     def do_get(self):
         self.respond_method_not_allowed()
