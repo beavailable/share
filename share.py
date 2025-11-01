@@ -90,7 +90,7 @@ class BaseHandler(BaseHTTPRequestHandler):
             super().handle_one_request()
         except Exception as e:
             self.close_connection = True
-            self.log_message(f'{type(e).__name__}{': ' + str(e) if e.args else ''}')
+            self.log_error(f'{type(e).__name__}{': ' + str(e) if e.args else ''}')
 
     def do_GET(self):
         self._split_path()
@@ -221,6 +221,7 @@ class BaseHandler(BaseHTTPRequestHandler):
         self.send_response_only(code, message)
 
     def send_error(self, code, message=None, explain=None):
+        command = self.command if self.command else '???'
         if message is None:
             if code in self.responses:
                 message = self.responses[code][0]
@@ -230,7 +231,7 @@ class BaseHandler(BaseHTTPRequestHandler):
             detail = parse.unquote(self.path)
         except AttributeError:
             detail = message
-        self.log_error('%s %d %s', self.command if self.command else '???', code, detail)
+        self.log_error(f'{command} {code} {detail}')
         self.send_response_only(code, message)
         self.send_header('Connection', 'close')
         self.end_headers()
