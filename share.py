@@ -90,7 +90,7 @@ class BaseHandler(BaseHTTPRequestHandler):
             super().handle_one_request()
         except Exception as e:
             self.close_connection = True
-            self.log_error(f'{type(e).__name__}{': ' + str(e) if e.args else ''}')
+            self.log_error(f'{type(e).__name__}: {e}'.rstrip(': '))
 
     def do_GET(self):
         self._split_path()
