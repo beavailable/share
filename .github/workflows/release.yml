@@ -32,12 +32,12 @@ jobs:
           windows-icon-from-ico: windows/favicon.ico
           file-version: ${{ github.ref_name }}
           product-version: ${{ github.ref_name }}
-          output-file: share-${{ env.ARCH }}.exe
+          output-file: share_${{ env.ARCH }}.exe
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: share-${{ env.ARCH }}
-          path: build/share-${{ env.ARCH }}.exe
+          name: share_${{ env.ARCH }}
+          path: build/share_${{ env.ARCH }}.exe
   release:
     needs: build
     runs-on: ubuntu-latest
@@ -51,6 +51,6 @@ jobs:
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
-          files: share-*.exe
+          files: share_*.exe
           fail_on_unmatched_files: true
           generate_release_notes: true
