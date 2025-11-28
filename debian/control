@@ -1,0 +1,19 @@
+Source: share
+Section: httpd
+Priority: optional
+Maintainer: beavailable <beavailable@proton.me>
+Build-Depends:
+ debhelper-compat (= 13),
+Standards-Version: 4.7.2
+Homepage: https://github.com/beavailable/share
+
+Package: share
+Architecture: all
+Multi-Arch: foreign
+Depends:
+ ${misc:Depends},
+ python3:any,
+Suggests:
+ python3-qrcode,
+ python3-zstandard,
+Description: Share something.
