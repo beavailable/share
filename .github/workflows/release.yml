@@ -20,7 +20,7 @@ jobs:
           password: ${{ secrets.OBS_PASSWORD }}
           project: home:beavailable
           package: share
-          files: ../share_*.dsc ../share_*.tar.xz
+          files: ../share_${{ github.ref_name }}.dsc ../share_${{ github.ref_name }}.tar.xz
   build:
     strategy:
       matrix:
