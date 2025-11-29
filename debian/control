@@ -16,4 +16,4 @@ Depends:
 Suggests:
  python3-qrcode,
  python3-zstandard,
-Description: Share something.
+Description: Share something
