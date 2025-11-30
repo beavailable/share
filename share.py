@@ -97,17 +97,35 @@ class BaseHandler(BaseHTTPRequestHandler):
         if self._path_only == '/favicon.ico':
             self.respond_for_file('favicon.ico')
             return
-        if not self._password or self._validate_password():
+        if not self._password:
+            self.do_get()
+            return
+        if 'Authorization' in self.headers:
+            if self._validate_password_from_authorization():
+                self.do_get()
+            else:
+                self.respond_unauthorized()
+            return
+        if self._validate_password_from_cookie():
             self.do_get()
             return
         if self._path_only != '/':
             self.respond_redirect(f'/?returnUrl={self.path}')
-            return
-        self.respond_for_html(self._build_html_for_password())
+        else:
+            self.respond_for_html(self._build_html_for_password())
 
     def do_POST(self):
         self._split_path()
-        if not self._password or self._validate_password():
+        if not self._password:
+            self.do_post()
+            return
+        if 'Authorization' in self.headers:
+            if self._validate_password_from_authorization():
+                self.do_post()
+            else:
+                self.respond_unauthorized()
+            return
+        if self._validate_password_from_cookie():
             self.do_post()
             return
         content_length = self.get_content_length()
@@ -130,7 +148,16 @@ class BaseHandler(BaseHTTPRequestHandler):
 
     def do_PUT(self):
         self._split_path()
-        if not self._password or self._validate_password():
+        if not self._password:
+            self.do_put()
+            return
+        if 'Authorization' in self.headers:
+            if self._validate_password_from_authorization():
+                self.do_put()
+            else:
+                self.respond_unauthorized()
+            return
+        if self._validate_password_from_cookie():
             self.do_put()
             return
         self.respond_unauthorized()
@@ -234,12 +261,31 @@ class BaseHandler(BaseHTTPRequestHandler):
         self.log_error(f'{command} {code} {detail}')
         self.send_response_only(code, message)
         self.send_header('Connection', 'close')
+        if code == HTTPStatus.UNAUTHORIZED:
+            self.send_header('WWW-Authorization', 'Basic realm="Realm"')
         self.end_headers()
 
-    def _validate_password(self):
-        cookie = cookies.SimpleCookie(self.headers['Cookie'])
-        password = cookie.get('password')
-        return password and parse.unquote_plus(password.value) == self._password
+    def _validate_password_from_authorization(self):
+        authorization = self.headers['Authorization']
+        if not authorization:
+            return False
+        scheme, _, credential = authorization.partition(' ')
+        if scheme != 'Basic' or not credential:
+            return False
+        credential = base64.b64decode(credential).decode()
+        if not credential:
+            return False
+        username, _, password = credential.partition(':')
+        return username == 'user' and password == self._password
+
+    def _validate_password_from_cookie(self):
+        cookie = self.headers['Cookie']
+        if not cookie:
+            return False
+        password = cookies.SimpleCookie(cookie).get('password')
+        if not password:
+            return False
+        return parse.unquote_plus(password.value) == self._password
 
     def _build_html_for_password(self):
         builder = HtmlBuilder()
