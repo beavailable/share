@@ -43,16 +43,24 @@ tls options:
 ## Screenshot
 ![img](https://github.com/beavailable/share/blob/main/screenshot.gif)
 
+## Installation
+
+### Windows
+You can download the latest release from the [Release page](https://github.com/beavailable/share/releases).
+
+### Debian
+Install via the OBS repo (see [obs-repo](https://github.com/beavailable/obs-repo) for setup).
+
 ## Tips
 - If you're sharing just one file, you can use the shortcut name `file` to access it：
     ```bash
     http://{host}:{port}/file
     ```
-    To save with the original filename with `wget`:
+    to save with the original filename with `wget`:
     ```bash
     wget --content-disposition http://{host}:{port}/file
     ```
-    Or with `curl`:
+    or with `curl`:
     ```bash
     curl -OJ http://{host}:{port}/file
     ```
@@ -66,7 +74,7 @@ tls options:
     # create new folders at the same time
     curl -F file=@/path/to/file http://{host}:{port}/custom/path
     ```
-    Or:
+    or:
     ```bash
     curl -T /path/to/file http://{host}:{port}
     # create new folders at the same time
