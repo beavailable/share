@@ -48,8 +48,11 @@ tls options:
 ### Windows
 You can download the latest release from the [Release page](https://github.com/beavailable/share/releases).
 
-### Debian
+### Debian & Ubuntu
 Install via the OBS repo (see [obs-repo](https://github.com/beavailable/obs-repo) for setup).
+
+### Other Distros
+Just [download](https://raw.githubusercontent.com/beavailable/share/refs/heads/main/share.py) the script.
 
 ## Tips
 - If you're sharing just one file, you can use the shortcut name `file` to access it：
