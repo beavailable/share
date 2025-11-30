@@ -82,3 +82,4 @@ Install via the OBS repo (see [obs-repo](https://github.com/beavailable/obs-repo
     # with a different filename
     curl -T /path/to/file http://{host}:{port}/custom/path/custom-filename
     ```
+- If you want to use HTTP Basic authentication, remember the username is always "user".
