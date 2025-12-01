@@ -1,3 +1,10 @@
+share (25.12.2) unstable; urgency=medium
+
+  * Add support for HTTP Basic authentiation.
+  * Add a share.service disabled by default.
+
+ -- beavailable <beavailable@proton.me>  Mon, 01 Dec 2025 16:35:36 +0800
+
 share (25.12.1) unstable; urgency=low
 
   * Initial release.
