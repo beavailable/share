@@ -225,6 +225,9 @@ class BaseHandler(BaseHTTPRequestHandler):
             self.respond_redirect(redirect_location)
 
     def handle_putfile(self, file_path):
+        if file_path.endswith('/'):
+            self.respond_bad_request()
+            return
         content_length = self.get_content_length()
         if not content_length:
             self.respond_bad_request()
