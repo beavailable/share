@@ -11,8 +11,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
-      - name: Build source package
-        run: dpkg-source -b .
       - name: Upload to OBS
         uses: beavailable/obs-upload@main
         with:
@@ -20,7 +18,7 @@ jobs:
           password: ${{ secrets.OBS_PASSWORD }}
           project: home:beavailable
           package: share
-          files: ../share_${{ github.ref_name }}.dsc ../share_${{ github.ref_name }}.tar.xz
+          type: deb
   build:
     strategy:
       matrix:
