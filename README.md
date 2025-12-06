@@ -42,6 +42,16 @@ tls options:
   --keypass KEYPASS     key password
 ```
 
+## Auth Patterns
+Here are a few examples:
+- `*` or `/*` matches all paths
+- `/foo/*` matches paths start with `/foo/` and the path `/foo.tar.zst`
+- `/foo/bar*` matches paths start with `/foo/bar`
+- `*bar` matches paths end with`bar`
+- `/foo[ab]*` matches paths start with `/fooa` and `/foob`  
+
+For full documention, please see [fnmatch](https://docs.python.org/3/library/fnmatch.html).
+
 ## Screenshot
 ![img](https://github.com/beavailable/share/blob/main/screenshot.gif)
 
