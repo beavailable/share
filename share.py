@@ -17,6 +17,7 @@ import re
 import socket
 import ssl
 import tarfile
+import fnmatch
 
 
 class ShareServer(ThreadingHTTPServer):
@@ -72,9 +73,8 @@ class BaseHandler(BaseHTTPRequestHandler):
     _control_char_table = str.maketrans({c: fr'\x{c:02x}' for c in (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 92, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159)})
     # fmt: on
 
-    def __init__(self, *args, password=None):
+    def __init__(self, *args):
         self._hostname = socket.gethostname()
-        self._password = password
         if sys.version_info >= (3, 14):
             self._zstd = InternalZstdAdapter()
         else:
@@ -90,14 +90,19 @@ class BaseHandler(BaseHTTPRequestHandler):
             super().handle_one_request()
         except Exception as e:
             self.close_connection = True
-            self.log_error(f'{type(e).__name__}: {e}'.rstrip(': '))
+            self.log_error(f'{type(e).__name__}: {e}'.removesuffix(': '))
+
+    def is_protected_path(self, path):
+        if path.endswith('.tar.zst'):
+            path = path.removesuffix('.tar.zst').rstrip('/') + '/'
+        return re.match(self.auth_pattern, path)
 
     def do_GET(self):
         self._split_path()
         if self._path_only == '/favicon.ico':
             self.respond_for_file('favicon.ico')
             return
-        if not self._password:
+        if not self.password or not self.is_protected_path(self._path_only):
             self.do_get()
             return
         if 'Authorization' in self.headers:
@@ -109,14 +114,14 @@ class BaseHandler(BaseHTTPRequestHandler):
         if self._validate_password_from_cookie():
             self.do_get()
             return
-        if self._path_only != '/':
-            self.respond_redirect(f'/?returnUrl={self.path}')
-        else:
+        if 'unauthorized' in self._queries:
             self.respond_for_html(self._build_html_for_password())
+        else:
+            self.respond_redirect(parse.quote(self._path_only) + '?unauthorized')
 
     def do_POST(self):
         self._split_path()
-        if not self._password:
+        if not self.password or not self.is_protected_path(self._path_only):
             self.do_post()
             return
         if 'Authorization' in self.headers:
@@ -135,20 +140,20 @@ class BaseHandler(BaseHTTPRequestHandler):
         data = self.rfile.read(content_length).decode()
         data = parse.unquote_plus(data)
         password, _, remember_device = data.partition('&')
-        if password == f'password={self._password}':
-            cookie = f'password={parse.quote_plus(self._password)}; path=/'
+        if password == f'password={self.password}':
+            cookie = f'password={parse.quote_plus(self.password)}; path=/'
             if remember_device == 'remember_device=on':
                 cookie += '; max-age=31536000'
             cookie += '; HttpOnly'
-            redirect_url = parse.quote(self._queries.get('returnUrl', self._path_only))
+            redirect_url = parse.quote(self._path_only)
         else:
             cookie = None
-            redirect_url = self.path
+            redirect_url = parse.quote(self._path_only) + '?unauthorized'
         self.respond_redirect(redirect_url, cookie)
 
     def do_PUT(self):
         self._split_path()
-        if not self._password:
+        if not self.password or not self.is_protected_path(self._path_only):
             self.do_put()
             return
         if 'Authorization' in self.headers:
@@ -279,7 +284,7 @@ class BaseHandler(BaseHTTPRequestHandler):
         if not credential:
             return False
         username, _, password = credential.partition(':')
-        return username == 'user' and password == self._password
+        return username == 'user' and password == self.password
 
     def _validate_password_from_cookie(self):
         cookie = self.headers['Cookie']
@@ -288,7 +293,7 @@ class BaseHandler(BaseHTTPRequestHandler):
         password = cookies.SimpleCookie(cookie).get('password')
         if not password:
             return False
-        return parse.unquote_plus(password.value) == self._password
+        return parse.unquote_plus(password.value) == self.password
 
     def _build_html_for_password(self):
         builder = HtmlBuilder()
@@ -592,7 +597,7 @@ class BaseFileShareHandler(BaseHandler):
             if dir_path == '/':
                 filename = 'root.tar.zst'
             else:
-                filename = f'{os.path.basename(dir_path.rstrip("/"))}.tar.zst'
+                filename = f'{os.path.basename(dir_path.rstrip("/\\"))}.tar.zst'
             content_disposition = f'attachment; filename="{parse.quote(filename)}"'
         else:
             content_disposition = None
@@ -605,23 +610,34 @@ class BaseFileShareHandler(BaseHandler):
         with ChunkWriter(self.wfile) as writer:
             with self._zstd.get_writer(writer) as w:
                 with tarfile.open(None, 'w|', w, 65536) as tar:
-                    self.archive_folder(dir_path, '', tar)
+                    url_path = self._path_only.removesuffix('.tar.zst').rstrip('/')
+                    self.archive_folder(dir_path, url_path, '', tar)
 
-    def archive_folder(self, dir_path, arcname, tar):
+    def archive_folder(self, dir_path, url_path, arcname, tar):
         with os.scandir(dir_path) as it:
             for entry in it:
                 try:
-                    if self.file_filter(entry.path):
-                        tarinfo = tar.gettarinfo(entry.path, arcname + '/' + entry.name)
-                        if tarinfo:
-                            if tarinfo.isdir():
-                                tar.addfile(tarinfo)
-                                self.archive_folder(entry.path, arcname + '/' + entry.name, tar)
-                            elif tarinfo.isfile():
-                                with open(entry.path, 'rb') as f:
-                                    tar.addfile(tarinfo, f)
-                            else:
-                                tar.addfile(tarinfo)
+                    if entry.is_dir():
+                        url_name = f'{entry.name}/'
+                    else:
+                        url_name = entry.name
+                    if self.is_protected_path(f'{url_path}/{url_name}'):
+                        continue
+                    if not self.file_filter(entry.path):
+                        continue
+                    tarinfo = tar.gettarinfo(entry.path, f'{arcname}/{entry.name}')
+                    if not tarinfo:
+                        continue
+                    if tarinfo.isdir():
+                        tar.addfile(tarinfo)
+                        self.archive_folder(
+                            entry.path, f'{url_path}/{entry.name}', f'{arcname}/{entry.name}', tar
+                        )
+                    elif tarinfo.isfile():
+                        with open(entry.path, 'rb') as f:
+                            tar.addfile(tarinfo, f)
+                    else:
+                        tar.addfile(tarinfo)
                 except (PermissionError, FileNotFoundError):
                     pass
 
@@ -1592,13 +1608,13 @@ def main():
         '-a',
         '--all',
         action='store_true',
-        help='show all files, including hidden ones, only for directory',
+        help='show all files, including hidden ones (only for directory)',
     )
     general.add_argument(
         '-z',
         '--archive',
         action='store_true',
-        help='share the directory itself as an archive, only for directory',
+        help='share the directory itself as an archive (only for directory)',
     )
     general.add_argument('-t', '--text', action='store_true', help='for text')
     general.add_argument(
@@ -1607,6 +1623,13 @@ def main():
         nargs='?',
         const=os.getenv('SHARE_PASSWORD'),
         help='access password, if no PASSWORD is specified, the environment variable SHARE_PASSWORD will be used',
+    )
+    general.add_argument(
+        '-A',
+        '--auth-pattern',
+        dest='pattern',
+        default='*',
+        help='glob pattern of paths requiring authentication [default: *]',
     )
     general.add_argument('-q', '--qrcode', action='store_true', help='show the qrcode')
     general.add_argument('-h', '--help', action='help', help='show this help message and exit')
@@ -1629,9 +1652,7 @@ def main():
             dir_path = os.path.abspath(args.arguments[0])
         else:
             raise FileNotFoundError(f'{args.arguments[0]} is not a directory')
-        handler_class = functools.partial(
-            DirectoryShareHandler, dir_path, args.all, upload=True, password=args.password
-        )
+        handler_class = functools.partial(DirectoryShareHandler, dir_path, args.all, upload=True)
     elif args.share:
         if args.text:
             if args.arguments:
@@ -1641,7 +1662,7 @@ def main():
                 text = ''.join(sys.stdin.readlines())
                 if not text:
                     sys.exit(1)
-            handler_class = functools.partial(TextShareHandler, text, password=args.password)
+            handler_class = functools.partial(TextShareHandler, text)
         else:
             dir_path, files = None, None
             if not args.arguments:
@@ -1655,18 +1676,14 @@ def main():
                 files = [os.path.abspath(f) for f in args.arguments]
             if dir_path:
                 if args.archive:
-                    handler_class = functools.partial(
-                        VirtualTarShareHandler, dir_path, args.all, password=args.password
-                    )
+                    handler_class = functools.partial(VirtualTarShareHandler, dir_path, args.all)
                 else:
-                    handler_class = functools.partial(
-                        DirectoryShareHandler, dir_path, args.all, password=args.password
-                    )
+                    handler_class = functools.partial(DirectoryShareHandler, dir_path, args.all)
             else:
-                handler_class = functools.partial(FileShareHandler, files, password=args.password)
+                handler_class = functools.partial(FileShareHandler, files)
     else:
         if args.text:
-            handler_class = functools.partial(TextReceiveHandler, password=args.password)
+            handler_class = TextReceiveHandler
         else:
             dir_path = None
             if not args.arguments:
@@ -1675,7 +1692,9 @@ def main():
                 dir_path = os.path.abspath(args.arguments[0])
             else:
                 raise FileNotFoundError(f'{args.arguments[0]} is not a directory')
-            handler_class = functools.partial(FileReceiveHandler, dir_path, password=args.password)
+            handler_class = functools.partial(FileReceiveHandler, dir_path)
+    BaseHandler.password = args.password
+    BaseHandler.auth_pattern = fnmatch.translate(args.pattern)
     start_server(
         args.address,
         args.port,
