@@ -14,6 +14,7 @@ Depends:
  ${misc:Depends},
  python3:any,
 Suggests:
+ bash-completion,
  python3-qrcode,
  python3-zstandard,
 Description: Share something

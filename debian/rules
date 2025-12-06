@@ -4,12 +4,14 @@
 
 override_dh_auto_build:
 	dh_auto_build
-	mkdir build/; \
-	cp share.py build/share
+	mkdir -p build/bin/ build/completions; \
+	cp share.py build/bin/share; \
+	cp share.bash.completion build/completions/share
 
 override_dh_auto_install:
 	dh_auto_install
-	dh_install build/share usr/bin/
+	dh_install build/bin/* usr/bin/
+	dh_install build/completions/* usr/share/bash-completion/completions/
 
 override_dh_installsystemd:
 	dh_installsystemd --no-enable --no-start --no-stop-on-upgrade
