@@ -74,6 +74,7 @@ class BaseHandler(BaseHTTPRequestHandler):
     # fmt: on
 
     def __init__(self, *args):
+        self._validated = False
         self._hostname = socket.gethostname()
         if sys.version_info >= (3, 14):
             self._zstd = InternalZstdAdapter()
@@ -95,74 +96,55 @@ class BaseHandler(BaseHTTPRequestHandler):
     def is_protected_path(self, path):
         if path.endswith('.tar.zst'):
             path = path.removesuffix('.tar.zst').rstrip('/') + '/'
-        return re.match(self.auth_pattern, path)
+        return re.match(self.auth_pattern, path) != None
 
     def do_GET(self):
+        self._validate_password_from_authorization() or self._validate_password_from_cookie()
         self._split_path()
         if self._path_only == '/favicon.ico':
             self.respond_for_file('favicon.ico')
             return
-        if not self.password or not self.is_protected_path(self._path_only):
+        if 'login' in self._queries:
+            self.respond_for_html(self._build_html_for_password())
+            return
+        if self._validated or not self.password or not self.is_protected_path(self._path_only):
             self.do_get()
             return
         if 'Authorization' in self.headers:
-            if self._validate_password_from_authorization():
-                self.do_get()
-            else:
-                self.respond_unauthorized()
-            return
-        if self._validate_password_from_cookie():
-            self.do_get()
-            return
-        if 'unauthorized' in self._queries:
-            self.respond_for_html(self._build_html_for_password())
+            self.respond_unauthorized()
         else:
-            self.respond_redirect(parse.quote(self._path_only) + '?unauthorized')
+            self.respond_redirect(parse.quote(self._path_only) + '?login')
 
     def do_POST(self):
+        self._validate_password_from_authorization() or self._validate_password_from_cookie()
         self._split_path()
-        if not self.password or not self.is_protected_path(self._path_only):
-            self.do_post()
-            return
-        if 'Authorization' in self.headers:
-            if self._validate_password_from_authorization():
-                self.do_post()
+        if 'login' in self._queries:
+            content_length = self.get_content_length()
+            if not content_length or content_length > 100:
+                self.respond_bad_request()
+                return
+            data = self.rfile.read(content_length).decode()
+            data = parse.unquote_plus(data)
+            password, _, remember_device = data.partition('&')
+            if password == f'password={self.password}':
+                cookie = f'password={parse.quote_plus(self.password)}; path=/'
+                if remember_device == 'remember_device=on':
+                    cookie += '; max-age=31536000'
+                cookie += '; HttpOnly'
+                redirect_url = parse.quote(self._path_only)
             else:
-                self.respond_unauthorized()
-            return
-        if self._validate_password_from_cookie():
+                cookie = None
+                redirect_url = parse.quote(self._path_only) + '?login'
+            self.respond_redirect(redirect_url, cookie)
+        if self._validated or not self.password or not self.is_protected_path(self._path_only):
             self.do_post()
             return
-        content_length = self.get_content_length()
-        if not content_length or content_length > 100:
-            self.respond_bad_request()
-            return
-        data = self.rfile.read(content_length).decode()
-        data = parse.unquote_plus(data)
-        password, _, remember_device = data.partition('&')
-        if password == f'password={self.password}':
-            cookie = f'password={parse.quote_plus(self.password)}; path=/'
-            if remember_device == 'remember_device=on':
-                cookie += '; max-age=31536000'
-            cookie += '; HttpOnly'
-            redirect_url = parse.quote(self._path_only)
-        else:
-            cookie = None
-            redirect_url = parse.quote(self._path_only) + '?unauthorized'
-        self.respond_redirect(redirect_url, cookie)
+        self.respond_unauthorized()
 
     def do_PUT(self):
+        self._validate_password_from_authorization() or self._validate_password_from_cookie()
         self._split_path()
-        if not self.password or not self.is_protected_path(self._path_only):
-            self.do_put()
-            return
-        if 'Authorization' in self.headers:
-            if self._validate_password_from_authorization():
-                self.do_put()
-            else:
-                self.respond_unauthorized()
-            return
-        if self._validate_password_from_cookie():
+        if self._validated or not self.password or not self.is_protected_path(self._path_only):
             self.do_put()
             return
         self.respond_unauthorized()
@@ -274,6 +256,7 @@ class BaseHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def _validate_password_from_authorization(self):
+        self._validated = False
         authorization = self.headers['Authorization']
         if not authorization:
             return False
@@ -284,16 +267,21 @@ class BaseHandler(BaseHTTPRequestHandler):
         if not credential:
             return False
         username, _, password = credential.partition(':')
-        return username == 'user' and password == self.password
+        if username == 'user' and password == self.password:
+            self._validated = True
+        return self._validated
 
     def _validate_password_from_cookie(self):
+        self._validated = False
         cookie = self.headers['Cookie']
         if not cookie:
             return False
         password = cookies.SimpleCookie(cookie).get('password')
         if not password:
             return False
-        return parse.unquote_plus(password.value) == self.password
+        if parse.unquote_plus(password.value) == self.password:
+            self._validated = True
+        return self._validated
 
     def _build_html_for_password(self):
         builder = HtmlBuilder()
@@ -621,7 +609,7 @@ class BaseFileShareHandler(BaseHandler):
                         url_name = f'{entry.name}/'
                     else:
                         url_name = entry.name
-                    if self.is_protected_path(f'{url_path}/{url_name}'):
+                    if not self._validated and self.is_protected_path(f'{url_path}/{url_name}'):
                         continue
                     if not self.file_filter(entry.path):
                         continue
