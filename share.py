@@ -93,10 +93,8 @@ class BaseHandler(BaseHTTPRequestHandler):
             self.close_connection = True
             self.log_error(f'{type(e).__name__}: {e}'.removesuffix(': '))
 
-    def is_protected_path(self, path):
-        if path.endswith('.tar.zst'):
-            path = path.removesuffix('.tar.zst').rstrip('/') + '/'
-        return re.match(self.auth_pattern, path) != None
+    def can_access(self, path):
+        return self._validated or not self.password or re.match(self.auth_pattern, path) is None
 
     def do_GET(self):
         self._validate_password_from_authorization() or self._validate_password_from_cookie()
@@ -107,7 +105,7 @@ class BaseHandler(BaseHTTPRequestHandler):
         if 'login' in self._queries:
             self.respond_for_html(self._build_html_for_password())
             return
-        if self._validated or not self.password or not self.is_protected_path(self._path_only):
+        if self.can_access(self._path_only):
             self.do_get()
             return
         if 'Authorization' in self.headers:
@@ -136,7 +134,7 @@ class BaseHandler(BaseHTTPRequestHandler):
                 cookie = None
                 redirect_url = parse.quote(self._path_only) + '?login'
             self.respond_redirect(redirect_url, cookie)
-        if self._validated or not self.password or not self.is_protected_path(self._path_only):
+        if self.can_access(self._path_only):
             self.do_post()
             return
         self.respond_unauthorized()
@@ -144,7 +142,7 @@ class BaseHandler(BaseHTTPRequestHandler):
     def do_PUT(self):
         self._validate_password_from_authorization() or self._validate_password_from_cookie()
         self._split_path()
-        if self._validated or not self.password or not self.is_protected_path(self._path_only):
+        if self.can_access(self._path_only):
             self.do_put()
             return
         self.respond_unauthorized()
@@ -609,7 +607,7 @@ class BaseFileShareHandler(BaseHandler):
                         url_name = f'{entry.name}/'
                     else:
                         url_name = entry.name
-                    if not self._validated and self.is_protected_path(f'{url_path}/{url_name}'):
+                    if not self.can_access(f'{url_path}/{url_name}'):
                         continue
                     if not self.file_filter(entry.path):
                         continue
@@ -950,6 +948,9 @@ class DirectoryShareHandler(BaseFileShareHandler):
             self.respond_for_file(full_path)
             return
         if full_path.endswith('.tar.zst'):
+            if not self.can_access(self._path_only.removesuffix('.tar.zst').rstrip('/') + '/'):
+                self.respond_unauthorized()
+                return
             full_path = full_path[:-8]
             if os.path.isdir(full_path):
                 self.respond_for_archive(full_path)
