@@ -97,7 +97,7 @@ class BaseHandler(BaseHTTPRequestHandler):
         return self._validated or not self.password or re.match(self.auth_pattern, path) is None
 
     def do_GET(self):
-        self._validate_password_from_authorization() or self._validate_password_from_cookie()
+        self._validate_password()
         self._split_path()
         if self._path_only == '/favicon.ico':
             self.respond_for_file('favicon.ico')
@@ -114,7 +114,7 @@ class BaseHandler(BaseHTTPRequestHandler):
             self.respond_redirect(parse.quote(self._path_only) + '?login')
 
     def do_POST(self):
-        self._validate_password_from_authorization() or self._validate_password_from_cookie()
+        self._validate_password()
         self._split_path()
         if 'login' in self._queries:
             content_length = self.get_content_length()
@@ -140,7 +140,7 @@ class BaseHandler(BaseHTTPRequestHandler):
         self.respond_unauthorized()
 
     def do_PUT(self):
-        self._validate_password_from_authorization() or self._validate_password_from_cookie()
+        self._validate_password()
         self._split_path()
         if self.can_access(self._path_only):
             self.do_put()
@@ -253,33 +253,32 @@ class BaseHandler(BaseHTTPRequestHandler):
             self.send_header('WWW-Authorization', 'Basic realm="Realm"')
         self.end_headers()
 
-    def _validate_password_from_authorization(self):
+    def _validate_password(self):
         self._validated = False
-        authorization = self.headers['Authorization']
-        if not authorization:
-            return False
-        scheme, _, credential = authorization.partition(' ')
-        if scheme != 'Basic' or not credential:
-            return False
-        credential = base64.b64decode(credential).decode()
-        if not credential:
-            return False
-        username, _, password = credential.partition(':')
-        if username == 'user' and password == self.password:
+        while not self._validated:
+            authorization = self.headers['Authorization']
+            if not authorization:
+                break
+            scheme, _, credential = authorization.partition(' ')
+            if scheme != 'Basic' or not credential:
+                break
+            credential = base64.b64decode(credential).decode()
+            if not credential:
+                break
+            username, _, password = credential.partition(':')
+            if username != 'user' or password != self.password:
+                break
             self._validated = True
-        return self._validated
-
-    def _validate_password_from_cookie(self):
-        self._validated = False
-        cookie = self.headers['Cookie']
-        if not cookie:
-            return False
-        password = cookies.SimpleCookie(cookie).get('password')
-        if not password:
-            return False
-        if parse.unquote_plus(password.value) == self.password:
+        while not self._validated:
+            cookie = self.headers['Cookie']
+            if not cookie:
+                break
+            password = cookies.SimpleCookie(cookie).get('password')
+            if not password:
+                break
+            if parse.unquote_plus(password.value) != self.password:
+                break
             self._validated = True
-        return self._validated
 
     def _build_html_for_password(self):
         builder = HtmlBuilder()
