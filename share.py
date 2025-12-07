@@ -94,7 +94,7 @@ class BaseHandler(BaseHTTPRequestHandler):
             self.log_error(f'{type(e).__name__}: {e}'.removesuffix(': '))
 
     def can_access(self, path):
-        return self._validated or not self.password or re.match(self.auth_pattern, path) is None
+        return not self.password or self._validated or re.match(self.auth_pattern, path) is None
 
     def do_GET(self):
         self._validate_password()
@@ -254,6 +254,8 @@ class BaseHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def _validate_password(self):
+        if not self.password:
+            return
         self._validated = False
         while not self._validated:
             authorization = self.headers['Authorization']
