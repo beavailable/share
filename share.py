@@ -608,9 +608,9 @@ class BaseFileShareHandler(BaseHandler):
                         url_name = f'{entry.name}/'
                     else:
                         url_name = entry.name
-                    if not self.can_access(f'{url_path}/{url_name}'):
-                        continue
                     if not self.file_filter(entry.path):
+                        continue
+                    if not self.can_access(f'{url_path}/{url_name}'):
                         continue
                     tarinfo = tar.gettarinfo(entry.path, f'{arcname}/{entry.name}')
                     if not tarinfo:
