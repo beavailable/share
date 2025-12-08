@@ -1337,7 +1337,7 @@ class FileItem:
         self.size = size
         self._name_parts = [
             (string if string else number, int(number) if number else None)
-            for string, number in self._name_part_pattern.findall(name.lower())
+            for string, number in self._name_part_pattern.findall(name.upper())
         ]
 
     def __lt__(self, other):
