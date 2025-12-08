@@ -1,3 +1,11 @@
+share (25.12.3) unstable; urgency=medium
+
+  * Add -a, --auth-pattern option.
+  * Add bash completion support.
+  * Minor improvements.
+
+ -- beavailable <beavailable@proton.me>  Mon, 08 Dec 2025 11:50:06 +0800
+
 share (25.12.2) unstable; urgency=medium
 
   * Add support for HTTP Basic authentiation.
