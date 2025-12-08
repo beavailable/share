@@ -51,7 +51,7 @@ Here are a few examples:
 - `*bar` matches paths end with`bar`
 - `/foo[ab]*` matches paths start with `/fooa` and `/foob`  
 
-For full documention, please see [fnmatch](https://docs.python.org/3/library/fnmatch.html).
+For full documentation on the pattern syntax, please see [fnmatch](https://docs.python.org/3/library/fnmatch.html).
 
 ## Screenshot
 ![img](https://github.com/beavailable/share/blob/main/screenshot.gif)
