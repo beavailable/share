@@ -134,6 +134,7 @@ class BaseHandler(BaseHTTPRequestHandler):
                 cookie = None
                 redirect_url = parse.quote(self._path_only) + '?login'
             self.respond_redirect(redirect_url, cookie)
+            return
         if self.can_access(self._path_only):
             self.do_post()
             return
