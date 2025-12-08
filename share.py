@@ -94,7 +94,14 @@ class BaseHandler(BaseHTTPRequestHandler):
             self.log_error(f'{type(e).__name__}: {e}'.removesuffix(': '))
 
     def can_access(self, path):
-        return not self.password or self._validated or re.match(self.auth_pattern, path) is None
+        if not self.password or self._validated:
+            return True
+        if re.match(self.auth_pattern, path) is not None:
+            return False
+        if not path.endswith('.tar.zst'):
+            return True
+        path = path.removesuffix('.tar.zst').rstrip('/') + '/'
+        return re.match(self.auth_pattern, path) is None
 
     def do_GET(self):
         self._validate_password()
@@ -950,9 +957,6 @@ class DirectoryShareHandler(BaseFileShareHandler):
             self.respond_for_file(full_path)
             return
         if full_path.endswith('.tar.zst'):
-            if not self.can_access(self._path_only.removesuffix('.tar.zst').rstrip('/') + '/'):
-                self.respond_unauthorized()
-                return
             full_path = full_path[:-8]
             if os.path.isdir(full_path):
                 self.respond_for_archive(full_path)
