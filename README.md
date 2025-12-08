@@ -5,8 +5,9 @@ This is a command-line file sharing tool, which has just a single file and is ea
 - Crossing multiple platforms
 - Sharing directories, files and texts
 - Receiving files and texts
-- Range request support
 - Password sharing
+- Basic authentication support
+- Range request support
 - TLS support
 - Zstd compression support (requires [python-zstandard](https://github.com/indygreg/python-zstandard), optional and not needed on Python 3.14+)
 - QR code support (requires [python-qrcode](https://github.com/lincolnloop/python-qrcode), optional)
