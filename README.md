@@ -54,7 +54,7 @@ Here are a few examples:
 For full documentation on the pattern syntax, please see [fnmatch](https://docs.python.org/3/library/fnmatch.html).
 
 ## Screenshot
-![img](https://github.com/beavailable/share/blob/main/screenshot.gif)
+![img](https://raw.githubusercontent.com/beavailable/share/refs/heads/main/screenshot.gif)
 
 ## Installation
 
