@@ -115,10 +115,10 @@ class BaseHandler(BaseHTTPRequestHandler):
         if self.can_access(self._path_only):
             self.do_get()
             return
-        if 'Authorization' in self.headers:
-            self.respond_unauthorized()
-        else:
+        if self.get_accept_content_type() == 'text/html':
             self.respond_redirect(parse.quote(self._path_only) + '?login')
+        else:
+            self.respond_unauthorized()
 
     def do_POST(self):
         self._validate_password()
