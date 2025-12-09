@@ -170,7 +170,14 @@ class BaseHandler(BaseHTTPRequestHandler):
             return None
         return int(content_length)
 
-    def get_accept_encoding(self):
+    def get_accept_content_type(self):
+        act = self.headers.get('Accept', '').split(',')[0]
+        act, _, q = act.partition(';')
+        if act == '*/*' and self.headers.get('User-Agent', '').startswith('curl'):
+            act = 'text/plain'
+        return act
+
+    def get_accept_encodings(self):
         accept_encoding = self.headers['Accept-Encoding']
         if not accept_encoding:
             return set()
@@ -454,22 +461,28 @@ class BaseHandler(BaseHTTPRequestHandler):
     def respond_internal_server_error(self):
         self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR)
 
-    def respond_with_html(self, html, last_modified=None):
-        if len(html) >= 1024 and 'zstd' in self.get_accept_encoding() and self._zstd:
-            html = self._zstd.compress(html)
-            content_length = len(html)
+    def respond_with_data(self, data, content_type, last_modified=None):
+        if len(data) >= 1024 and 'zstd' in self.get_accept_encodings() and self._zstd:
+            data = self._zstd.compress(data)
+            content_length = len(data)
             content_encoding = 'zstd'
         else:
-            content_length = len(html)
+            content_length = len(data)
             content_encoding = None
         self.respond(
             HTTPStatus.OK,
-            content_type='text/html; charset=utf-8',
+            content_type=content_type,
             content_length=content_length,
             last_modified=last_modified,
             content_encoding=content_encoding,
         )
-        self.wfile.write(html)
+        self.wfile.write(data)
+
+    def respond_with_html(self, html, last_modified=None):
+        self.respond_with_data(html.encode(), 'text/html; charset=utf-8', last_modified)
+
+    def respond_with_text(self, text, last_modified=None):
+        self.respond_with_data(text.encode(), 'text/plain; charset=utf-8', last_modified)
 
     def respond_with_file(self, file, send_content_disposition=False):
         if file == 'favicon.ico':
@@ -518,7 +531,7 @@ class BaseHandler(BaseHTTPRequestHandler):
             if (
                 status == HTTPStatus.OK
                 and content_length >= 1024
-                and 'zstd' in self.get_accept_encoding()
+                and 'zstd' in self.get_accept_encodings()
                 and self._zstd
             ):
                 compress = True
@@ -639,11 +652,20 @@ class BaseFileShareHandler(BaseHandler):
     def file_filter(self, file_path):
         raise NotImplementedError
 
-    def build_html(self, path, dirs, files):
-        if path == '/':
+    def build_text(self, dirs, files):
+        lst = []
+        for d in dirs:
+            lst.append(f'{d.name}/')
+        for f in files:
+            lst.append(f'{f.name}\t{f.size}')
+        lst.append('')
+        return '\n'.join(lst)
+
+    def build_html(self, dirs, files):
+        if self._path_only == '/':
             title = self._hostname
         else:
-            title = os.path.basename(path.rstrip('/'))
+            title = os.path.basename(self._path_only.rstrip('/'))
         builder = HtmlBuilder()
         builder.start_head()
         builder.start_title()
@@ -761,7 +783,7 @@ window.onload = on_load;
         builder.append('<div>')
         builder.append(f'<a href="/">{html.escape(self._hostname)}</a>')
         p = ''
-        for name in path.split('/'):
+        for name in self._path_only.split('/'):
             if name:
                 p = f'{p}/{name}'
                 builder.append(f'&nbsp;/&nbsp;<a href="{parse.quote(p)}/">{html.escape(name)}</a>')
@@ -769,7 +791,7 @@ window.onload = on_load;
         if self._upload:
             builder.append('<button id="upload" class="upload">Upload</button>')
             builder.append(
-                f'<form id="form" action="{parse.quote(path)}" method="post" enctype="multipart/form-data" style="display: none;">'
+                f'<form id="form" action="{parse.quote(self._path_only)}" method="post" enctype="multipart/form-data" style="display: none;">'
             )
             builder.append('<input id="file" name="file" type="file" required multiple>')
             builder.append('</form>')
@@ -872,9 +894,12 @@ class VirtualTarShareHandler(BaseFileShareHandler):
             last_modified = self.start_time
             if self.get_if_modified_since() == last_modified:
                 self.respond_not_modified(last_modified)
+                return
+            dirs, files = [], [FileItem(self._filename, False, -1)]
+            if self.get_accept_content_type() == 'text/plain':
+                self.respond_with_text(self.build_text(dirs, files), last_modified)
             else:
-                dirs, files = [], [FileItem(self._filename, False, -1)]
-                self.respond_with_html(self.build_html(self._path_only, dirs, files), last_modified)
+                self.respond_with_html(self.build_html(dirs, files), last_modified)
             return
         name = self._path_only[1:]
         if name == self._filename or name == 'file':
@@ -895,7 +920,10 @@ class FileShareHandler(BaseFileShareHandler):
     def do_get(self):
         if self._path_only == '/':
             dirs, files = self.list_files()
-            self.respond_with_html(self.build_html(self._path_only, dirs, files))
+            if self.get_accept_content_type() == 'text/plain':
+                self.respond_with_text(self.build_text(dirs, files))
+            else:
+                self.respond_with_html(self.build_html(dirs, files))
             return
         name = self._path_only[1:]
         file_path = self._find_file(name)
@@ -951,7 +979,10 @@ class DirectoryShareHandler(BaseFileShareHandler):
             except FileNotFoundError:
                 self.respond_not_found()
                 return
-            self.respond_with_html(self.build_html(self._path_only, dirs, files))
+            if self.get_accept_content_type() == 'text/plain':
+                self.respond_with_text(self.build_text(dirs, files))
+            else:
+                self.respond_with_html(self.build_html(dirs, files))
             return
         if os.path.isfile(full_path):
             self.respond_with_file(full_path)
@@ -1148,8 +1179,14 @@ class TextShareHandler(BaseHandler):
         last_modified = self.start_time
         if self.get_if_modified_since() == last_modified:
             self.respond_not_modified(last_modified)
+            return
+        if self.get_accept_content_type() == 'text/plain':
+            self.respond_with_text(self.build_text(), last_modified)
         else:
             self.respond_with_html(self.build_html(), last_modified)
+
+    def build_text(self):
+        return f'{self._text}\n'
 
     def build_html(self):
         builder = HtmlBuilder()
@@ -1324,7 +1361,7 @@ class HtmlBuilder:
 
     def build(self):
         self._list.append('</html>')
-        return ''.join(self._list).encode()
+        return ''.join(self._list)
 
 
 class FileItem:
