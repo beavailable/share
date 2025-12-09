@@ -107,10 +107,10 @@ class BaseHandler(BaseHTTPRequestHandler):
         self._validate_password()
         self._split_path()
         if self._path_only == '/favicon.ico':
-            self.respond_for_file('favicon.ico')
+            self.respond_with_file('favicon.ico')
             return
         if 'login' in self._queries:
-            self.respond_for_html(self._build_html_for_password())
+            self.respond_with_html(self._build_html_for_password())
             return
         if self.can_access(self._path_only):
             self.do_get()
@@ -454,7 +454,7 @@ class BaseHandler(BaseHTTPRequestHandler):
     def respond_internal_server_error(self):
         self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR)
 
-    def respond_for_html(self, html, last_modified=None):
+    def respond_with_html(self, html, last_modified=None):
         if len(html) >= 1024 and 'zstd' in self.get_accept_encoding() and self._zstd:
             html = self._zstd.compress(html)
             content_length = len(html)
@@ -471,7 +471,7 @@ class BaseHandler(BaseHTTPRequestHandler):
         )
         self.wfile.write(html)
 
-    def respond_for_file(self, file, send_content_disposition=False):
+    def respond_with_file(self, file, send_content_disposition=False):
         if file == 'favicon.ico':
             filename = 'favicon.ico'
             filesize = len(self.ico)
@@ -584,7 +584,7 @@ class BaseFileShareHandler(BaseHandler):
             self.is_hidden = self._is_hidden_unix
         super().__init__(*args, **kwargs)
 
-    def respond_for_archive(self, dir_path, send_content_disposition=False):
+    def respond_with_archive(self, dir_path, send_content_disposition=False):
         if not self._zstd:
             self.respond_not_found()
             return
@@ -874,11 +874,11 @@ class VirtualTarShareHandler(BaseFileShareHandler):
                 self.respond_not_modified(last_modified)
             else:
                 dirs, files = [], [FileItem(self._filename, False, -1)]
-                self.respond_for_html(self.build_html(self._path_only, dirs, files), last_modified)
+                self.respond_with_html(self.build_html(self._path_only, dirs, files), last_modified)
             return
         name = self._path_only[1:]
         if name == self._filename or name == 'file':
-            self.respond_for_archive(self._dir, name == 'file')
+            self.respond_with_archive(self._dir, name == 'file')
             return
         self.respond_not_found()
 
@@ -895,15 +895,15 @@ class FileShareHandler(BaseFileShareHandler):
     def do_get(self):
         if self._path_only == '/':
             dirs, files = self.list_files()
-            self.respond_for_html(self.build_html(self._path_only, dirs, files))
+            self.respond_with_html(self.build_html(self._path_only, dirs, files))
             return
         name = self._path_only[1:]
         file_path = self._find_file(name)
         if file_path:
-            self.respond_for_file(file_path)
+            self.respond_with_file(file_path)
             return
         if len(self._files) == 1 and name == 'file':
-            self.respond_for_file(self._files[0], True)
+            self.respond_with_file(self._files[0], True)
             return
         self.respond_not_found()
 
@@ -951,15 +951,15 @@ class DirectoryShareHandler(BaseFileShareHandler):
             except FileNotFoundError:
                 self.respond_not_found()
                 return
-            self.respond_for_html(self.build_html(self._path_only, dirs, files))
+            self.respond_with_html(self.build_html(self._path_only, dirs, files))
             return
         if os.path.isfile(full_path):
-            self.respond_for_file(full_path)
+            self.respond_with_file(full_path)
             return
         if full_path.endswith('.tar.zst'):
             full_path = full_path[:-8]
             if os.path.isdir(full_path):
-                self.respond_for_archive(full_path)
+                self.respond_with_archive(full_path)
                 return
         self.respond_not_found()
 
@@ -1028,7 +1028,7 @@ class FileReceiveHandler(BaseHandler):
         if self.get_if_modified_since() == last_modified:
             self.respond_not_modified(last_modified)
         else:
-            self.respond_for_html(self.build_html(), last_modified)
+            self.respond_with_html(self.build_html(), last_modified)
 
     def build_html(self):
         builder = HtmlBuilder()
@@ -1149,7 +1149,7 @@ class TextShareHandler(BaseHandler):
         if self.get_if_modified_since() == last_modified:
             self.respond_not_modified(last_modified)
         else:
-            self.respond_for_html(self.build_html(), last_modified)
+            self.respond_with_html(self.build_html(), last_modified)
 
     def build_html(self):
         builder = HtmlBuilder()
@@ -1183,7 +1183,7 @@ class TextReceiveHandler(BaseHandler):
         if self.get_if_modified_since() == last_modified:
             self.respond_not_modified(last_modified)
         else:
-            self.respond_for_html(self.build_html(), last_modified)
+            self.respond_with_html(self.build_html(), last_modified)
 
     def build_html(self):
         builder = HtmlBuilder()
