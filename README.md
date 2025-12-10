@@ -71,13 +71,9 @@ Just [download](https://raw.githubusercontent.com/beavailable/share/refs/heads/m
 - If you're sharing just one file, you can use the shortcut name `file` to access it：
     ```bash
     http://{host}:{port}/file
-    ```
-    to save with the original filename with `wget`:
-    ```bash
+
+    # to save with the original filename
     wget --content-disposition http://{host}:{port}/file
-    ```
-    or with `curl`:
-    ```bash
     curl -OJ http://{host}:{port}/file
     ```
 - To get an archive of a folder, you can add the `.tar.zst` extension to the url:
@@ -86,12 +82,12 @@ Just [download](https://raw.githubusercontent.com/beavailable/share/refs/heads/m
     ```
 - If you want to upload files to the sharing server with `curl`, you can use:
     ```bash
+    # POST
     curl -F file=@/path/to/file http://{host}:{port}
     # create new folders at the same time
     curl -F file=@/path/to/file http://{host}:{port}/custom/path
-    ```
-    or:
-    ```bash
+
+    # PUT
     curl -T /path/to/file http://{host}:{port}
     # create new folders at the same time
     curl -T /path/to/file http://{host}:{port}/custom/path/
