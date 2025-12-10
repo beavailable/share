@@ -657,7 +657,7 @@ class BaseFileShareHandler(BaseHandler):
         for d in dirs:
             lst.append(f'{d.name}/')
         for f in files:
-            lst.append(f'{f.name}\t{f.size}')
+            lst.append(f'{f.name}\t{self._format_size(f.size)}')
         lst.append('')
         return '\n'.join(lst)
 
