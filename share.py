@@ -267,7 +267,7 @@ class BaseHandler(BaseHTTPRequestHandler):
         self.send_response_only(code, message)
         self.send_header('Connection', 'close')
         if code == HTTPStatus.UNAUTHORIZED:
-            self.send_header('WWW-Authorization', 'Basic realm="Realm"')
+            self.send_header('WWW-Authenticate', 'Basic realm="Realm"')
         self.end_headers()
 
     def _validate_password(self):
