@@ -49,7 +49,7 @@ Here are a few examples:
 - `/foo/*` matches paths start with `/foo/` and the path `/foo.tar.zst`
 - `/foo/bar*` matches paths start with `/foo/bar`
 - `*bar` matches paths end with`bar`
-- `/foo[ab]*` matches paths start with `/fooa` and `/foob`  
+- `/foo[ab]*` matches paths start with `/fooa` or `/foob`  
 
 For full documentation on the pattern syntax, please see [fnmatch](https://docs.python.org/3/library/fnmatch.html).
 
