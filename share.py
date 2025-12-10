@@ -116,7 +116,7 @@ class BaseHandler(BaseHTTPRequestHandler):
             self.do_get()
             return
         if self.get_accept_content_type() == 'text/html':
-            self.respond_redirect(parse.quote(self._path_only) + '?login')
+            self.respond_redirect(parse.quote(self._path_only) + '?login', connection='close')
         else:
             self.respond_unauthorized()
 
@@ -137,10 +137,12 @@ class BaseHandler(BaseHTTPRequestHandler):
                     cookie += '; max-age=31536000'
                 cookie += '; HttpOnly'
                 redirect_url = parse.quote(self._path_only)
+                connection = None
             else:
                 cookie = None
                 redirect_url = parse.quote(self._path_only) + '?login'
-            self.respond_redirect(redirect_url, cookie)
+                connection = 'close'
+            self.respond_redirect(redirect_url, cookie=cookie, connection=connection)
             return
         if self.can_access(self._path_only):
             self.do_post()
@@ -400,6 +402,7 @@ class BaseHandler(BaseHTTPRequestHandler):
         content_disposition=None,
         location=None,
         cookie=None,
+        connection=None,
     ):
         self.send_response(status)
         if content_type is not None:
@@ -425,10 +428,18 @@ class BaseHandler(BaseHTTPRequestHandler):
             self.send_header('Location', location)
         if cookie is not None:
             self.send_header('Set-Cookie', cookie)
+        if connection is not None:
+            self.send_header('Connection', connection)
         self.end_headers()
 
-    def respond_redirect(self, location, cookie=None):
-        self.respond(HTTPStatus.SEE_OTHER, content_length='0', location=location, cookie=cookie)
+    def respond_redirect(self, location, cookie=None, connection=None):
+        self.respond(
+            HTTPStatus.SEE_OTHER,
+            content_length='0',
+            location=location,
+            cookie=cookie,
+            connection=connection,
+        )
 
     def respond_not_modified(
         self, last_modified, content_type='text/html; charset=utf-8', accept_ranges=None
