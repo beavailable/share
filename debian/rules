@@ -6,7 +6,7 @@ override_dh_auto_build:
 	dh_auto_build
 	mkdir -p build/bin/ build/completions; \
 	cp share.py build/bin/share; \
-	cp share.bash.completion build/completions/share
+	cp share-completion.bash build/completions/share
 
 override_dh_auto_install:
 	dh_auto_install
