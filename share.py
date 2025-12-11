@@ -113,7 +113,7 @@ class BaseHandler(BaseHTTPRequestHandler):
             self.respond_with_html(self._build_html_for_password())
             return
         if self.can_access(self._path_only):
-            self.do_get()
+            self.handle_get()
             return
         if self.get_accept_content_type() == 'text/html':
             self.respond_redirect(parse.quote(self._path_only) + '?login', connection='close')
@@ -145,7 +145,7 @@ class BaseHandler(BaseHTTPRequestHandler):
             self.respond_redirect(redirect_url, cookie=cookie, connection=connection)
             return
         if self.can_access(self._path_only):
-            self.do_post()
+            self.handle_post()
             return
         self.respond_unauthorized()
 
@@ -153,17 +153,17 @@ class BaseHandler(BaseHTTPRequestHandler):
         self._validate_password()
         self._split_path()
         if self.can_access(self._path_only):
-            self.do_put()
+            self.handle_put()
             return
         self.respond_unauthorized()
 
-    def do_get(self):
+    def handle_get(self):
         self.respond_method_not_allowed()
 
-    def do_post(self):
+    def handle_post(self):
         self.respond_method_not_allowed()
 
-    def do_put(self):
+    def handle_put(self):
         self.respond_method_not_allowed()
 
     def get_content_length(self):
@@ -900,7 +900,7 @@ class VirtualTarShareHandler(BaseFileShareHandler):
         self._all = all_files
         super().__init__(*args, **kwargs)
 
-    def do_get(self):
+    def handle_get(self):
         if self._path_only == '/':
             last_modified = self.start_time
             if self.get_if_modified_since() == last_modified:
@@ -928,7 +928,7 @@ class FileShareHandler(BaseFileShareHandler):
         self._files = files
         super().__init__(*args, **kwargs)
 
-    def do_get(self):
+    def handle_get(self):
         if self._path_only == '/':
             dirs, files = self.list_files()
             if self.get_accept_content_type() == 'text/plain':
@@ -973,7 +973,7 @@ class DirectoryShareHandler(BaseFileShareHandler):
             self._contains_hidden_segment = self._contains_hidden_segment_unix
         super().__init__(*args, **kwargs)
 
-    def do_get(self):
+    def handle_get(self):
         if not self.is_url_valid(self._path_only):
             self.respond_not_found()
             return
@@ -1028,19 +1028,19 @@ class DirectoryShareHandler(BaseFileShareHandler):
                     pass
         return (sorted(dirs), sorted(files))
 
-    def do_post(self):
+    def handle_post(self):
         if self._upload:
             self.handle_multipart(
                 self._dir.rstrip('/') + self._path_only, parse.quote(self._path_only)
             )
         else:
-            super().do_post()
+            super().handle_post()
 
-    def do_put(self):
+    def handle_put(self):
         if self._upload:
             self.handle_putfile(self._dir.rstrip('/') + self._path_only)
         else:
-            super().do_put()
+            super().handle_put()
 
     def file_filter(self, file_path):
         return self._all or not self.is_hidden(file_path)
@@ -1065,7 +1065,7 @@ class FileReceiveHandler(BaseHandler):
         self._dir = dir_path
         super().__init__(*args, **kwargs)
 
-    def do_get(self):
+    def handle_get(self):
         last_modified = self.start_time
         if self.get_if_modified_since() == last_modified:
             self.respond_not_modified(last_modified)
@@ -1170,10 +1170,10 @@ window.onload = on_load;
         builder.end_body()
         return builder.build()
 
-    def do_post(self):
+    def handle_post(self):
         self.handle_multipart(self._dir.rstrip('/') + self._path_only, parse.quote(self._path_only))
 
-    def do_put(self):
+    def handle_put(self):
         self.handle_putfile(self._dir.rstrip('/') + self._path_only)
 
 
@@ -1183,7 +1183,7 @@ class TextShareHandler(BaseHandler):
         self._text = text
         super().__init__(*args, **kwargs)
 
-    def do_get(self):
+    def handle_get(self):
         if self._path_only != '/':
             self.respond_redirect('/')
             return
@@ -1223,7 +1223,7 @@ class TextShareHandler(BaseHandler):
 
 class TextReceiveHandler(BaseHandler):
 
-    def do_get(self):
+    def handle_get(self):
         if self._path_only != '/':
             self.respond_redirect('/')
             return
@@ -1286,7 +1286,7 @@ window.onload = on_load;
         builder.end_body()
         return builder.build()
 
-    def do_post(self):
+    def handle_post(self):
         if self._path_only != '/':
             self.respond_bad_request()
             return
