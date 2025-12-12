@@ -115,10 +115,10 @@ class BaseHandler(BaseHTTPRequestHandler):
         if self.can_access(self._path_only):
             self.handle_get()
             return
-        if self.get_accept_content_type() == 'text/html':
-            self.respond_redirect(parse.quote(self._path_only) + '?login', connection='close')
-        else:
+        if self.get_accept_content_type() == 'text/plain':
             self.respond_unauthorized()
+        else:
+            self.respond_redirect(f'{parse.quote(self._path_only)}?login', connection='close')
 
     def do_POST(self):
         self._validate_password()
@@ -140,7 +140,7 @@ class BaseHandler(BaseHTTPRequestHandler):
                 connection = None
             else:
                 cookie = None
-                redirect_url = parse.quote(self._path_only) + '?login'
+                redirect_url = f'{parse.quote(self._path_only)}?login'
                 connection = 'close'
             self.respond_redirect(redirect_url, cookie=cookie, connection=connection)
             return
@@ -195,7 +195,11 @@ class BaseHandler(BaseHTTPRequestHandler):
         else:
             return time.struct_time((*if_modified_since[:-1], 0))
 
-    def handle_multipart(self, save_dir, redirect_location):
+    def handle_multipart(self, save_dir, path):
+        if not path.endswith('/'):
+            self.respond_bad_request()
+            return
+        save_dir = f'{save_dir.rstrip("/\\")}{path}'
         content_length = self.get_content_length()
         if not content_length:
             self.respond_bad_request()
@@ -224,7 +228,10 @@ class BaseHandler(BaseHTTPRequestHandler):
         except FileExistsError:
             self.respond_internal_server_error()
         else:
-            self.respond_redirect(redirect_location)
+            if self.get_accept_content_type() == 'text/plain':
+                self.respond(HTTPStatus.OK, content_length='0')
+            else:
+                self.respond_redirect(parse.quote(path))
 
     def handle_putfile(self, file_path):
         if file_path.endswith('/'):
@@ -980,7 +987,7 @@ class DirectoryShareHandler(BaseFileShareHandler):
         full_path = self._dir.rstrip('/') + self._path_only
         if os.path.isdir(full_path):
             if not self._path_only.endswith('/'):
-                self.respond_redirect(self._path_only + '/')
+                self.respond_redirect(parse.quote(f'{self._path_only}/'))
                 return
             try:
                 dirs, files = self.list_dir(full_path)
@@ -1030,12 +1037,7 @@ class DirectoryShareHandler(BaseFileShareHandler):
 
     def handle_post(self):
         if self._upload:
-            if not self._path_only.endswith('/'):
-                self.respond_bad_request()
-                return
-            self.handle_multipart(
-                self._dir.rstrip('/') + self._path_only, parse.quote(self._path_only)
-            )
+            self.handle_multipart(self._dir, self._path_only)
         else:
             super().handle_post()
 
@@ -1174,10 +1176,7 @@ window.onload = on_load;
         return builder.build()
 
     def handle_post(self):
-        if not self._path_only.endswith('/'):
-            self.respond_bad_request()
-            return
-        self.handle_multipart(self._dir.rstrip('/') + self._path_only, parse.quote(self._path_only))
+        self.handle_multipart(self._dir, self._path_only)
 
     def handle_put(self):
         self.handle_putfile(self._dir.rstrip('/') + self._path_only)
@@ -1310,7 +1309,10 @@ window.onload = on_load;
             return
         text = self.rfile.read(content_length - 5).decode()
         text = parse.unquote_plus(text)
-        self.respond_redirect('/')
+        if self.get_accept_content_type() == 'text/plain':
+            self.respond(HTTPStatus.OK, content_length='0')
+        else:
+            self.respond_redirect('/')
         print(f'From {self.client_address[0]}:{self.client_address[1]}:\n{text}')
 
 
