@@ -85,7 +85,7 @@ Just [download](https://raw.githubusercontent.com/beavailable/share/refs/heads/m
     # POST
     curl -F file=@/path/to/file http://{host}:{port}
     # create new folders at the same time
-    curl -F file=@/path/to/file http://{host}:{port}/custom/path
+    curl -F file=@/path/to/file http://{host}:{port}/custom/path/
 
     # PUT
     curl -T /path/to/file http://{host}:{port}

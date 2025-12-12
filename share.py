@@ -1030,6 +1030,9 @@ class DirectoryShareHandler(BaseFileShareHandler):
 
     def handle_post(self):
         if self._upload:
+            if not self._path_only.endswith('/'):
+                self.respond_bad_request()
+                return
             self.handle_multipart(
                 self._dir.rstrip('/') + self._path_only, parse.quote(self._path_only)
             )
@@ -1171,6 +1174,9 @@ window.onload = on_load;
         return builder.build()
 
     def handle_post(self):
+        if not self._path_only.endswith('/'):
+            self.respond_bad_request()
+            return
         self.handle_multipart(self._dir.rstrip('/') + self._path_only, parse.quote(self._path_only))
 
     def handle_put(self):
