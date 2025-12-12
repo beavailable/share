@@ -1,3 +1,9 @@
+share (25.12.4) unstable; urgency=medium
+
+  * New release.
+
+ -- beavailable <beavailable@proton.me>  Fri, 12 Dec 2025 10:57:52 +0800
+
 share (25.12.3) unstable; urgency=medium
 
   * Add -a, --auth-pattern option.
