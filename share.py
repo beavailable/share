@@ -1071,6 +1071,9 @@ class FileReceiveHandler(BaseHandler):
         super().__init__(*args, **kwargs)
 
     def handle_get(self):
+        if not self._path_only.endswith('/'):
+            self.respond_redirect(f'{parse.quote(self._path_only)}/')
+            return
         last_modified = self.start_time
         if self.get_if_modified_since() == last_modified:
             self.respond_not_modified(last_modified)
