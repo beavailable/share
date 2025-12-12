@@ -225,7 +225,7 @@ class BaseHandler(BaseHTTPRequestHandler):
             self.respond_bad_request()
         except PermissionError:
             self.respond_forbidden()
-        except FileExistsError:
+        except (FileExistsError, IsADirectoryError):
             self.respond_internal_server_error()
         else:
             if self.get_accept_content_type() == 'text/plain':
@@ -250,7 +250,7 @@ class BaseHandler(BaseHTTPRequestHandler):
                     content_length -= l
         except PermissionError:
             self.respond_forbidden()
-        except FileExistsError:
+        except (FileExistsError, IsADirectoryError):
             self.respond_internal_server_error()
         else:
             self.respond(HTTPStatus.OK, content_length='0')
