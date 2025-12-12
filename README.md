@@ -47,7 +47,7 @@ tls options:
 Here are a few examples:
 - `*` or `/*` matches all paths
 - `/foo/*` matches paths start with `/foo/` and the path `/foo.tar.zst`
-- `/foo/bar*` matches paths start with `/foo/bar`
+- `!/foo/*` matches paths not start with `/foo/` and not the path `/foo.tar.zst`
 - `*bar` matches paths end with`bar`
 - `/foo[ab]*` matches paths start with `/fooa` or `/foob`  
 

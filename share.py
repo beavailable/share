@@ -96,12 +96,13 @@ class BaseHandler(BaseHTTPRequestHandler):
     def can_access(self, path):
         if not self.password or self._validated:
             return True
-        if self.auth_pattern.match(path) is not None:
+        if path.endswith('.tar.zst'):
+            path = path.removesuffix('.tar.zst').rstrip('/') + '/'
+            if bool(self.auth_pattern.match(path)) ^ self.invert_match:
+                return False
+        if bool(self.auth_pattern.match(path)) ^ self.invert_match:
             return False
-        if not path.endswith('.tar.zst'):
-            return True
-        path = path.removesuffix('.tar.zst').rstrip('/') + '/'
-        return self.auth_pattern.match(path) is None
+        return True
 
     def do_GET(self):
         self._validate_password()
@@ -1748,7 +1749,8 @@ def main():
                 raise FileNotFoundError(f'{args.arguments[0]} is not a directory')
             handler_class = functools.partial(FileReceiveHandler, dir_path)
     BaseHandler.password = args.password
-    BaseHandler.auth_pattern = re.compile(fnmatch.translate(args.pattern))
+    BaseHandler.auth_pattern = re.compile(fnmatch.translate(args.pattern.removeprefix('!')))
+    BaseHandler.invert_match = args.pattern.startswith('!')
     start_server(
         args.address,
         args.port,
