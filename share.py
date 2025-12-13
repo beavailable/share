@@ -136,7 +136,7 @@ class BaseHandler(BaseHTTPRequestHandler):
             if password == f'password={self.password}':
                 cookie = f'password={parse.quote_plus(self.encoded_password)}; path=/'
                 if remember_device == 'remember_device=on':
-                    cookie += '; max-age=31536000'
+                    cookie += '; max-age=2592000'
                 cookie += '; HttpOnly'
                 redirect_url = parse.quote(self._path_only)
                 connection = None
