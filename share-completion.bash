@@ -8,7 +8,7 @@ _share() {
             '-b')
                 _comp_compgen_ip_addresses -a
                 ;;
-            '-p' | '--port' | '-A' | '--auth-path' | '--keypass') ;;
+            '-p' | '--port' | '-A' | '--auth-pattern' | '--keypass') ;;
             *)
                 if ! [[ -d "$prev" ]]; then
                     _comp_compgen_filedir
