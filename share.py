@@ -10,6 +10,7 @@ from urllib import parse
 import html
 import mimetypes
 import base64
+import hashlib
 import io
 import time
 import stat
@@ -133,7 +134,7 @@ class BaseHandler(BaseHTTPRequestHandler):
             data = parse.unquote_plus(data)
             password, _, remember_device = data.partition('&')
             if password == f'password={self.password}':
-                cookie = f'password={parse.quote_plus(self.password)}; path=/'
+                cookie = f'password={parse.quote_plus(self.encoded_password)}; path=/'
                 if remember_device == 'remember_device=on':
                     cookie += '; max-age=31536000'
                 cookie += '; HttpOnly'
@@ -303,7 +304,7 @@ class BaseHandler(BaseHTTPRequestHandler):
             password = cookies.SimpleCookie(cookie).get('password')
             if not password:
                 break
-            if parse.unquote_plus(password.value) != self.password:
+            if parse.unquote_plus(password.value) != self.encoded_password:
                 break
             self._validated = True
 
@@ -1749,6 +1750,10 @@ def main():
                 raise FileNotFoundError(f'{args.arguments[0]} is not a directory')
             handler_class = functools.partial(FileReceiveHandler, dir_path)
     BaseHandler.password = args.password
+    if args.password:
+        BaseHandler.encoded_password = base64.b64encode(
+            hashlib.sha256(f'share-{args.password}'.encode()).digest()
+        ).decode()
     BaseHandler.auth_pattern = re.compile(fnmatch.translate(args.pattern.removeprefix('!')))
     BaseHandler.invert_match = args.pattern.startswith('!')
     start_server(
