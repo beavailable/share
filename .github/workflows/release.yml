@@ -32,9 +32,9 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: 3.14
+          python-version: 3.13
       - name: Install dependencies
-        run: pip install qrcode
+        run: pip install zstandard qrcode
       - name: Build
         env:
           CCFLAGS: -Os
@@ -42,7 +42,6 @@ jobs:
         with:
           nuitka-version: main
           script-name: share.py
-          nofollow-import-to: zstandard
           windows-icon-from-ico: windows/favicon.ico
           file-version: ${{ github.ref_name }}
           product-version: ${{ github.ref_name }}
