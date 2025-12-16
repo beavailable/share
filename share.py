@@ -597,14 +597,12 @@ class BaseHandler(BaseHTTPRequestHandler):
         self.log_message('%s %d %s', self.command, code, parse.unquote(self.path))
 
     def log_message(self, format, *args):
-        message = format % args
+        message = (format % args).translate(self._control_char_table)
         if self._should_log_time:
             t = time.strftime('%Y/%m/%d %H:%M:%S - ', time.localtime())
         else:
             t = ''
-        sys.stderr.write(
-            f'{t}{self.client_address[0]}:{self.client_address[1]} - {message.translate(self._control_char_table)}\n'
-        )
+        sys.stderr.write(f'{t}{self.client_address[0]}:{self.client_address[1]} - {message}\n')
 
 
 class BaseFileShareHandler(BaseHandler):
@@ -653,14 +651,13 @@ class BaseFileShareHandler(BaseHandler):
                         continue
                     if not self.can_access(f'{url_path}/{url_name}'):
                         continue
-                    tarinfo = tar.gettarinfo(entry.path, f'{arcname}/{entry.name}')
+                    arcname = f'{arcname}/{entry.name}'
+                    tarinfo = tar.gettarinfo(entry.path, arcname)
                     if not tarinfo:
                         continue
                     if tarinfo.isdir():
                         tar.addfile(tarinfo)
-                        self.archive_folder(
-                            entry.path, f'{url_path}/{entry.name}', f'{arcname}/{entry.name}', tar
-                        )
+                        self.archive_folder(entry.path, f'{url_path}/{entry.name}', arcname, tar)
                     elif tarinfo.isfile():
                         with open(entry.path, 'rb') as f:
                             tar.addfile(tarinfo, f)
@@ -934,7 +931,7 @@ class VirtualTarShareHandler(BaseFileShareHandler):
 class FileShareHandler(BaseFileShareHandler):
 
     def __init__(self, files, *args, **kwargs):
-        self._files = files
+        self._files = list(files)
         super().__init__(*args, **kwargs)
 
     def handle_get(self):
@@ -956,13 +953,13 @@ class FileShareHandler(BaseFileShareHandler):
         self.respond_not_found()
 
     def list_files(self):
-        dirs, files = [], []
+        files = []
         for f in self._files:
             try:
                 files.append(FileItem(os.path.basename(f), self.is_hidden(f), os.path.getsize(f)))
             except Exception:
                 pass
-        return (dirs, files)
+        return ([], sorted(files))
 
     def _find_file(self, name):
         for f in self._files:
@@ -1499,30 +1496,30 @@ class MultipartParser:
         return headers
 
     def _transfer_to(self, out):
-        line, next = None, None
+        line, next_line = None, None
         while True:
             if not line:
                 line = self._read_line()
             if line.endswith(b'\r'):
-                next = self._read_line()
-                if next != b'\n':
+                next_line = self._read_line()
+                if next_line != b'\n':
                     out.write(line)
-                    line = next
+                    line = next_line
                     continue
-                line += next
+                line += next_line
             if line.endswith(b'\r\n'):
-                next = self._read_line()
-                if next == self._separator:
+                next_line = self._read_line()
+                if next_line == self._separator:
                     if len(line) > 2:
                         out.write(line[:-2])
                     return
-                if next == self._terminator:
+                if next_line == self._terminator:
                     self._terminated = True
                     if len(line) > 2:
                         out.write(line[:-2])
                     return
                 out.write(line)
-                line = next
+                line = next_line
                 continue
             out.write(line)
             line = None
