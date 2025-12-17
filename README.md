@@ -43,7 +43,7 @@ tls options:
   --keypass KEYPASS     key password
 ```
 
-## Auth Patterns
+### Auth Patterns
 Here are a few examples:
 - `*` or `/*` matches all paths
 - `/foo/*` matches paths start with `/foo/` and the path `/foo.tar.zst`
