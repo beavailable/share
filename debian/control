@@ -17,4 +17,4 @@ Suggests:
  bash-completion,
  python3-qrcode,
  python3-zstandard,
-Description: Share something
+Description: Share and receive files effortlessly over HTTP
