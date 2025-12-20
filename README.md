@@ -47,9 +47,10 @@ tls options:
 Here are a few examples:
 - `*` or `/*` matches all paths
 - `/foo/*` matches paths start with `/foo/` and the path `/foo.tar.zst`
-- `!/foo/*` matches paths not start with `/foo/` and not the path `/foo.tar.zst`
 - `*bar` matches paths end with`bar`
 - `/foo[ab]*` matches paths start with `/fooa` or `/foob`  
+
+Additionally, a leading `!` on the pattern inverts the match.
 
 For full documentation on the pattern syntax, please see [fnmatch](https://docs.python.org/3/library/fnmatch.html).
 
