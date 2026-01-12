@@ -75,7 +75,7 @@ class BaseHandler(BaseHTTPRequestHandler):
     # fmt: on
 
     def __init__(self, *args):
-        self._validated = False
+        self._authenticated = False
         self._hostname = socket.gethostname()
         if sys.version_info >= (3, 14):
             self._zstd = InternalZstdAdapter()
@@ -94,27 +94,21 @@ class BaseHandler(BaseHTTPRequestHandler):
             self.close_connection = True
             self.log_error(f'{type(e).__name__}: {e}'.removesuffix(': '))
 
-    def can_access(self, path):
-        if not self.password or self._validated:
+    def can_access(self, method, path):
+        if self._authenticated:
             return True
-        if path.endswith('.tar.zst'):
-            path = path.removesuffix('.tar.zst').rstrip('/') + '/'
-            if bool(self.auth_pattern.match(path)) ^ self.invert_match:
-                return False
-        if bool(self.auth_pattern.match(path)) ^ self.invert_match:
-            return False
-        return True
+        return not self.rule_matcher.match(method, path)
 
     def do_GET(self):
-        self._validate_password()
         self._split_path()
+        self._authenticated = self.authenticator.authenticate(self.headers)
         if self._path_only == '/favicon.ico':
             self.respond_with_file('favicon.ico')
             return
         if 'login' in self._queries:
             self.respond_with_html(self._build_html_for_password())
             return
-        if self.can_access(self._path_only):
+        if self.can_access('GET', self._path_only):
             self.handle_get()
             return
         if self.get_accept_content_type() == 'text/plain':
@@ -123,8 +117,8 @@ class BaseHandler(BaseHTTPRequestHandler):
             self.respond_redirect(f'{parse.quote(self._path_only)}?login', connection='close')
 
     def do_POST(self):
-        self._validate_password()
         self._split_path()
+        self._authenticated = self.authenticator.authenticate(self.headers)
         if 'login' in self._queries:
             content_length = self.get_content_length()
             if not content_length or content_length > 100:
@@ -133,8 +127,8 @@ class BaseHandler(BaseHTTPRequestHandler):
             data = self.rfile.read(content_length).decode()
             data = parse.unquote_plus(data)
             password, _, remember_device = data.partition('&')
-            if password == f'password={self.password}':
-                cookie = f'password={parse.quote_plus(self.encoded_password)}; path=/'
+            if password == f'password={self.authenticator.password}':
+                cookie = f'password={parse.quote_plus(self.authenticator.encoded_password)}; path=/'
                 if remember_device == 'remember_device=on':
                     cookie += '; max-age=2592000'
                 cookie += '; HttpOnly'
@@ -146,15 +140,15 @@ class BaseHandler(BaseHTTPRequestHandler):
                 connection = 'close'
             self.respond_redirect(redirect_url, cookie=cookie, connection=connection)
             return
-        if self.can_access(self._path_only):
+        if self.can_access('POST', self._path_only):
             self.handle_post()
             return
         self.respond_unauthorized()
 
     def do_PUT(self):
-        self._validate_password()
         self._split_path()
-        if self.can_access(self._path_only):
+        self._authenticated = self.authenticator.authenticate(self.headers)
+        if self.can_access('PUT', self._path_only):
             self.handle_put()
             return
         self.respond_unauthorized()
@@ -278,35 +272,6 @@ class BaseHandler(BaseHTTPRequestHandler):
         if code == HTTPStatus.UNAUTHORIZED:
             self.send_header('WWW-Authenticate', 'Basic realm="Realm"')
         self.end_headers()
-
-    def _validate_password(self):
-        if not self.password:
-            return
-        self._validated = False
-        while not self._validated:
-            authorization = self.headers['Authorization']
-            if not authorization:
-                break
-            scheme, _, credential = authorization.partition(' ')
-            if scheme != 'Basic' or not credential:
-                break
-            credential = base64.b64decode(credential).decode()
-            if not credential:
-                break
-            username, _, password = credential.partition(':')
-            if username != 'user' or password != self.password:
-                break
-            self._validated = True
-        while not self._validated:
-            cookie = self.headers['Cookie']
-            if not cookie:
-                break
-            password = cookies.SimpleCookie(cookie).get('password')
-            if not password:
-                break
-            if parse.unquote_plus(password.value) != self.encoded_password:
-                break
-            self._validated = True
 
     def _build_html_for_password(self):
         builder = HtmlBuilder()
@@ -649,7 +614,7 @@ class BaseFileShareHandler(BaseHandler):
                         url_name = entry.name
                     if not self.file_filter(entry.path):
                         continue
-                    if not self.can_access(f'{url_path}/{url_name}'):
+                    if not self.can_access('GET', f'{url_path}/{url_name}'):
                         continue
                     arcname = f'{arcname}/{entry.name}'
                     tarinfo = tar.gettarinfo(entry.path, arcname)
@@ -1559,6 +1524,79 @@ class ChunkWriter:
         self.close()
 
 
+class Authenticator:
+
+    def __init__(self, password):
+        self.password = password
+        self.encoded_password = base64.b64encode(
+            hashlib.sha256(f'share:{password}'.encode()).digest()
+        ).decode()
+
+    def authenticate(self, headers):
+        if not self.password:
+            return True
+        authenticated = False
+        while not authenticated:
+            authorization = headers['Authorization']
+            if not authorization:
+                break
+            scheme, _, credential = authorization.partition(' ')
+            if scheme != 'Basic' or not credential:
+                break
+            credential = base64.b64decode(credential).decode()
+            if not credential:
+                break
+            username, _, password = credential.partition(':')
+            if username != 'user' or password != self.password:
+                break
+            authenticated = True
+        while not authenticated:
+            cookie = headers['Cookie']
+            if not cookie:
+                break
+            password = cookies.SimpleCookie(cookie).get('password')
+            if not password:
+                break
+            if parse.unquote_plus(password.value) != self.encoded_password:
+                break
+            authenticated = True
+        return authenticated
+
+
+class InvalidAuthRuleError(ValueError):
+    pass
+
+
+class AuthRuleMatcher:
+
+    def __init__(self, rules):
+        self._rules = {}
+        for rule in rules:
+            if ':' not in rule:
+                raise InvalidAuthRuleError
+            methods, _, pattern = rule.partition(':')
+            if not methods or not pattern:
+                raise InvalidAuthRuleError
+            pattern = re.compile(fnmatch.translate(pattern))
+            for method in methods.split(','):
+                if not method:
+                    raise InvalidAuthRuleError
+                if method in self._rules:
+                    self._rules[method].append(pattern)
+                else:
+                    self._rules[method] = [pattern]
+
+    def match(self, method, path):
+        if method not in self._rules:
+            return False
+        if any(rule.match(path) for rule in self._rules[method]):
+            return True
+        if path.endswith('.tar.zst'):
+            dir_path = path.removesuffix('.tar.zst').rstrip('/') + '/'
+            return any(rule.match(dir_path) for rule in self._rules[method])
+        return False
+
+
 def get_best_family(host, port):
     info = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM, flags=socket.AI_PASSIVE)
     family, type, proto, canonname, addr = info[0]
@@ -1678,11 +1716,11 @@ def main():
         help='access password, if no PASSWORD is specified, the environment variable SHARE_PASSWORD will be used',
     )
     general.add_argument(
-        '-A',
-        '--auth-pattern',
-        dest='pattern',
-        default='*',
-        help='glob pattern of paths requiring authentication [default: *]',
+        '-R',
+        '--auth-rule',
+        dest='rule',
+        action='append',
+        help='a rule for authentication, can be used multiple times [default: GET,POST,PUT:*]',
     )
     general.add_argument('-q', '--qrcode', action='store_true', help='show the qrcode')
     general.add_argument('-h', '--help', action='help', help='show this help message and exit')
@@ -1746,13 +1784,8 @@ def main():
             else:
                 raise FileNotFoundError(f'{args.arguments[0]} is not a directory')
             handler_class = functools.partial(FileReceiveHandler, dir_path)
-    BaseHandler.password = args.password
-    if args.password:
-        BaseHandler.encoded_password = base64.b64encode(
-            hashlib.sha256(f'share-{args.password}'.encode()).digest()
-        ).decode()
-    BaseHandler.auth_pattern = re.compile(fnmatch.translate(args.pattern.removeprefix('!')))
-    BaseHandler.invert_match = args.pattern.startswith('!')
+    BaseHandler.authenticator = Authenticator(args.password)
+    BaseHandler.rule_matcher = AuthRuleMatcher(args.rule if args.rule else ['GET,POST,PUT:*'])
     start_server(
         args.address,
         args.port,
