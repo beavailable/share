@@ -102,56 +102,38 @@ class BaseHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self._split_path()
         self._authenticated = self.authenticator.authenticate(self.headers)
-        if self._path_only == '/favicon.ico':
+        if self.path_only == '/favicon.ico':
             self.respond_with_file('favicon.ico')
             return
-        if 'login' in self._queries:
+        if 'login' in self.queries:
             self.respond_with_html(self._build_html_for_password())
             return
-        if self.can_access('GET', self._path_only):
+        if self.can_access('GET', self.path_only):
             self.handle_get()
             return
         if self.get_accept_content_type() == 'text/plain':
             self.respond_unauthorized()
         else:
-            self.respond_redirect(f'{parse.quote(self._path_only)}?login', connection='close')
+            self.respond_redirect(f'{parse.quote(self.path_only)}?login', connection='close')
 
     def do_POST(self):
         self._split_path()
         self._authenticated = self.authenticator.authenticate(self.headers)
-        if 'login' in self._queries:
-            content_length = self.get_content_length()
-            if not content_length or content_length > 100:
-                self.respond_bad_request()
-                return
-            data = self.rfile.read(content_length).decode()
-            data = parse.unquote_plus(data)
-            password, _, remember_device = data.partition('&')
-            if password == f'password={self.authenticator.password}':
-                cookie = f'password={parse.quote_plus(self.authenticator.encoded_password)}; path=/'
-                if remember_device == 'remember_device=on':
-                    cookie += '; max-age=2592000'
-                cookie += '; HttpOnly'
-                redirect_url = parse.quote(self._path_only)
-                connection = None
-            else:
-                cookie = None
-                redirect_url = f'{parse.quote(self._path_only)}?login'
-                connection = 'close'
-            self.respond_redirect(redirect_url, cookie=cookie, connection=connection)
+        if 'login' in self.queries:
+            self.authenticator.login(self)
             return
-        if self.can_access('POST', self._path_only):
+        if self.can_access('POST', self.path_only):
             self.handle_post()
             return
         if self.get_accept_content_type() == 'text/plain':
             self.respond_unauthorized()
         else:
-            self.respond_redirect(f'{parse.quote(self._path_only)}?login', connection='close')
+            self.respond_redirect(f'{parse.quote(self.path_only)}?login', connection='close')
 
     def do_PUT(self):
         self._split_path()
         self._authenticated = self.authenticator.authenticate(self.headers)
-        if self.can_access('PUT', self._path_only):
+        if self.can_access('PUT', self.path_only):
             self.handle_put()
             return
         self.respond_unauthorized()
@@ -355,7 +337,7 @@ class BaseHandler(BaseHTTPRequestHandler):
         for item in query.split('&'):
             key, _, value = item.partition('=')
             queries[key] = value
-        self._path_only, self._queries = collapsed_path, queries
+        self.path_only, self.queries = collapsed_path, queries
 
     def _guess_type(self, path):
         guess, _ = mimetypes.guess_type(path)
@@ -604,7 +586,7 @@ class BaseFileShareHandler(BaseHandler):
         with ChunkWriter(self.wfile) as writer:
             with self._zstd.get_writer(writer) as w:
                 with tarfile.open(None, 'w|', w, 65536) as tar:
-                    url_path = self._path_only.removesuffix('.tar.zst').rstrip('/')
+                    url_path = self.path_only.removesuffix('.tar.zst').rstrip('/')
                     self.archive_folder(dir_path, url_path, '', tar)
 
     def archive_folder(self, dir_path, url_path, arcname, tar):
@@ -647,10 +629,10 @@ class BaseFileShareHandler(BaseHandler):
         return '\n'.join(lst)
 
     def build_html(self, dirs, files):
-        if self._path_only == '/':
+        if self.path_only == '/':
             title = self._hostname
         else:
-            title = os.path.basename(self._path_only.rstrip('/'))
+            title = os.path.basename(self.path_only.rstrip('/'))
         builder = HtmlBuilder()
         builder.start_head()
         builder.start_title()
@@ -768,7 +750,7 @@ window.onload = on_load;
         builder.append('<div>')
         builder.append(f'<a href="/">{html.escape(self._hostname)}</a>')
         p = ''
-        for name in self._path_only.split('/'):
+        for name in self.path_only.split('/'):
             if name:
                 p = f'{p}/{name}'
                 builder.append(f'&nbsp;/&nbsp;<a href="{parse.quote(p)}/">{html.escape(name)}</a>')
@@ -776,7 +758,7 @@ window.onload = on_load;
         if self._upload:
             builder.append('<button id="upload" class="upload">Upload</button>')
             builder.append(
-                f'<form id="form" action="{parse.quote(self._path_only)}" method="post" enctype="multipart/form-data" style="display: none;">'
+                f'<form id="form" action="{parse.quote(self.path_only)}" method="post" enctype="multipart/form-data" style="display: none;">'
             )
             builder.append('<input id="file" name="file" type="file" required multiple>')
             builder.append('</form>')
@@ -875,7 +857,7 @@ class VirtualTarShareHandler(BaseFileShareHandler):
         super().__init__(*args, **kwargs)
 
     def handle_get(self):
-        if self._path_only == '/':
+        if self.path_only == '/':
             last_modified = self.start_time
             if self.get_if_modified_since() == last_modified:
                 self.respond_not_modified(last_modified)
@@ -886,7 +868,7 @@ class VirtualTarShareHandler(BaseFileShareHandler):
             else:
                 self.respond_with_html(self.build_html(dirs, files), last_modified)
             return
-        name = self._path_only[1:]
+        name = self.path_only[1:]
         if name == self._filename or name == 'file':
             self.respond_with_archive(self._dir, name == 'file')
             return
@@ -903,14 +885,14 @@ class FileShareHandler(BaseFileShareHandler):
         super().__init__(*args, **kwargs)
 
     def handle_get(self):
-        if self._path_only == '/':
+        if self.path_only == '/':
             dirs, files = self.list_files()
             if self.get_accept_content_type() == 'text/plain':
                 self.respond_with_text(self.build_text(dirs, files))
             else:
                 self.respond_with_html(self.build_html(dirs, files))
             return
-        name = self._path_only[1:]
+        name = self.path_only[1:]
         file_path = self._find_file(name)
         if file_path:
             self.respond_with_file(file_path)
@@ -948,13 +930,13 @@ class DirectoryShareHandler(BaseFileShareHandler):
         super().__init__(*args, **kwargs)
 
     def handle_get(self):
-        if not self.is_url_valid(self._path_only):
+        if not self.is_url_valid(self.path_only):
             self.respond_not_found()
             return
-        full_path = self._dir.rstrip('/') + self._path_only
+        full_path = self._dir.rstrip('/') + self.path_only
         if os.path.isdir(full_path):
-            if not self._path_only.endswith('/'):
-                self.respond_redirect(parse.quote(f'{self._path_only}/'))
+            if not self.path_only.endswith('/'):
+                self.respond_redirect(parse.quote(f'{self.path_only}/'))
                 return
             try:
                 dirs, files = self.list_dir(full_path)
@@ -1004,13 +986,13 @@ class DirectoryShareHandler(BaseFileShareHandler):
 
     def handle_post(self):
         if self._upload:
-            self.handle_multipart(self._dir, self._path_only)
+            self.handle_multipart(self._dir, self.path_only)
         else:
             super().handle_post()
 
     def handle_put(self):
         if self._upload:
-            self.handle_putfile(self._dir.rstrip('/') + self._path_only)
+            self.handle_putfile(self._dir.rstrip('/') + self.path_only)
         else:
             super().handle_put()
 
@@ -1038,8 +1020,8 @@ class FileReceiveHandler(BaseHandler):
         super().__init__(*args, **kwargs)
 
     def handle_get(self):
-        if not self._path_only.endswith('/'):
-            self.respond_redirect(f'{parse.quote(self._path_only)}/')
+        if not self.path_only.endswith('/'):
+            self.respond_redirect(f'{parse.quote(self.path_only)}/')
             return
         last_modified = self.start_time
         if self.get_if_modified_since() == last_modified:
@@ -1146,10 +1128,10 @@ window.onload = on_load;
         return builder.build()
 
     def handle_post(self):
-        self.handle_multipart(self._dir, self._path_only)
+        self.handle_multipart(self._dir, self.path_only)
 
     def handle_put(self):
-        self.handle_putfile(self._dir.rstrip('/') + self._path_only)
+        self.handle_putfile(self._dir.rstrip('/') + self.path_only)
 
 
 class TextShareHandler(BaseHandler):
@@ -1159,7 +1141,7 @@ class TextShareHandler(BaseHandler):
         super().__init__(*args, **kwargs)
 
     def handle_get(self):
-        if self._path_only != '/':
+        if self.path_only != '/':
             self.respond_redirect('/')
             return
         last_modified = self.start_time
@@ -1199,7 +1181,7 @@ class TextShareHandler(BaseHandler):
 class TextReceiveHandler(BaseHandler):
 
     def handle_get(self):
-        if self._path_only != '/':
+        if self.path_only != '/':
             self.respond_redirect('/')
             return
         last_modified = self.start_time
@@ -1262,7 +1244,7 @@ window.onload = on_load;
         return builder.build()
 
     def handle_post(self):
-        if self._path_only != '/':
+        if self.path_only != '/':
             self.respond_bad_request()
             return
         content_type = self.headers['Content-Type']
@@ -1530,13 +1512,38 @@ class ChunkWriter:
 class Authenticator:
 
     def __init__(self, password):
-        self.password = password
-        self.encoded_password = base64.b64encode(
-            hashlib.sha256(f'share:{password}'.encode()).digest()
-        ).decode()
+        self._password = password
+        if password:
+            self._encoded_password = base64.b64encode(
+                hashlib.sha256(f'share:{password}'.encode()).digest()
+            ).decode()
+
+    def login(self, handler):
+        if not self._password:
+            handler.respond_redirect(parse.quote(handler.path_only), connection='close')
+            return
+        content_length = handler.get_content_length()
+        if not content_length or content_length > 100:
+            handler.respond_bad_request()
+            return
+        data = handler.rfile.read(content_length).decode()
+        data = parse.unquote_plus(data)
+        password, _, remember_device = data.partition('&')
+        if password == f'password={self._password}':
+            cookie = f'password={parse.quote_plus(self._encoded_password)}; path=/'
+            if remember_device == 'remember_device=on':
+                cookie += '; max-age=2592000'
+            cookie += '; HttpOnly'
+            redirect_url = parse.quote(handler.path_only)
+            connection = None
+        else:
+            cookie = None
+            redirect_url = f'{parse.quote(handler.path_only)}?login'
+            connection = 'close'
+        handler.respond_redirect(redirect_url, cookie=cookie, connection=connection)
 
     def authenticate(self, headers):
-        if not self.password:
+        if not self._password:
             return True
         authenticated = False
         while not authenticated:
@@ -1550,7 +1557,7 @@ class Authenticator:
             if not credential:
                 break
             username, _, password = credential.partition(':')
-            if username != 'user' or password != self.password:
+            if username != 'user' or password != self._password:
                 break
             authenticated = True
         while not authenticated:
@@ -1560,7 +1567,7 @@ class Authenticator:
             password = cookies.SimpleCookie(cookie).get('password')
             if not password:
                 break
-            if parse.unquote_plus(password.value) != self.encoded_password:
+            if parse.unquote_plus(password.value) != self._encoded_password:
                 break
             authenticated = True
         return authenticated
