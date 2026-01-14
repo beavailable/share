@@ -1746,7 +1746,7 @@ def main():
 
     args = parser.parse_args()
     if args.version:
-        print('26.01.1')
+        print('26.01.2')
         return
     if args.password and len(args.password) < 3:
         raise ValueError('password is too short')
