@@ -15,7 +15,8 @@ This is a command-line file sharing tool, which has just a single file and is ea
 ## Usage
 ```
 usage: share.py [-b ADDRESS] [-p PORT] [-s] [-r] [-a] [-z] [-t] [-P [PASSWORD]] [-R RULE]
-                [-q] [-h] [--certfile CERTFILE] [--keyfile KEYFILE] [--keypass KEYPASS]
+                [-q] [-h] [-v] [--certfile CERTFILE] [--keyfile KEYFILE]
+                [--keypass KEYPASS]
                 [arguments ...]
 
 positional arguments:
@@ -32,8 +33,7 @@ general options:
   -P, --password [PASSWORD]
                         access password, if no PASSWORD is specified, the environment
                         variable SHARE_PASSWORD will be used
-  -R, --auth-rule RULE  a rule for authentication, can be used multiple times [default:
-                        GET,POST,PUT:*]
+  -R, --auth-rule RULE  a rule for authentication, can be used multiple times [default: *]
   -q, --qrcode          show the qrcode
   -h, --help            show this help message and exit
 
@@ -44,12 +44,12 @@ tls options:
 ```
 
 ### Auth Rules
-An auth rule consists of two components separated by `:`: a comma-separated list of HTTP methods and a pattern.  
+An auth rule consists of two components: a pattern and an optional comma-separated list of HTTP methods, separated by a `:`.  
 Here are a few examples:
-- `GET,POST,PUT:*` or `GET,POST,PUT:/*` matches all paths for `GET`, `POST` and `PUT`
-- `GET:/foo/*` matches paths start with `/foo/` and the path `/foo.tar.zst` for `GET`
-- `POST,PUT:*bar` matches paths end with `bar` for `POST` and `PUT`
-- `GET:/foo[ab]*` matches paths start with `/fooa` or `/foob`   for `GET`
+- `*`, `*:GET,POST,PUT` or `/*:GET,POST,PUT` matches all paths for `GET`, `POST` and `PUT`
+- `/foo/*:GET` matches paths start with `/foo/` and the path `/foo.tar.zst` for `GET`
+- `*bar:POST,PUT` matches paths end with `bar` for `POST` and `PUT`
+- `/foo[ab]*:GET` matches paths start with `/fooa` or `/foob`   for `GET`
 
 For full documentation on the pattern syntax, please see [fnmatch](https://docs.python.org/3/library/fnmatch.html).
 

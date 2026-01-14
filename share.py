@@ -1578,19 +1578,20 @@ class InvalidAuthRuleError(ValueError):
 
 
 class AuthRuleMatcher:
+    _rule_pattern = re.compile(
+        r'^(?P<pattern>[/*].*?)(:(?P<methods>((|GET|POST|PUT),)*(GET|POST|PUT)))?$'
+    )
 
     def __init__(self, rules):
         self._rules = {}
         for rule in rules:
-            if ':' not in rule:
+            match = self._rule_pattern.match(rule)
+            if not match:
                 raise InvalidAuthRuleError
-            methods, _, pattern = rule.partition(':')
-            if not methods or not pattern:
-                raise InvalidAuthRuleError
-            pattern = re.compile(fnmatch.translate(pattern))
+            pattern = re.compile(fnmatch.translate(match.group('pattern')))
+            methods = match.group('methods')
+            methods = methods if methods else 'GET,POST,PUT'
             for method in methods.split(','):
-                if not method:
-                    raise InvalidAuthRuleError
                 if method in self._rules:
                     self._rules[method].append(pattern)
                 else:
@@ -1730,7 +1731,7 @@ def main():
         '--auth-rule',
         dest='rule',
         action='append',
-        help='a rule for authentication, can be used multiple times [default: GET,POST,PUT:*]',
+        help='a rule for authentication, can be used multiple times [default: *]',
     )
     general.add_argument('-q', '--qrcode', action='store_true', help='show the qrcode')
     general.add_argument('-h', '--help', action='help', help='show this help message and exit')
@@ -1801,7 +1802,7 @@ def main():
                 raise FileNotFoundError(f'{args.arguments[0]} is not a directory')
             handler_class = functools.partial(FileReceiveHandler, dir_path)
     BaseHandler.authenticator = Authenticator(args.password)
-    BaseHandler.rule_matcher = AuthRuleMatcher(args.rule if args.rule else ['GET,POST,PUT:*'])
+    BaseHandler.rule_matcher = AuthRuleMatcher(args.rule if args.rule else ['*'])
     start_server(
         args.address,
         args.port,
