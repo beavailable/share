@@ -143,7 +143,10 @@ class BaseHandler(BaseHTTPRequestHandler):
         if self.can_access('POST', self._path_only):
             self.handle_post()
             return
-        self.respond_unauthorized()
+        if self.get_accept_content_type() == 'text/plain':
+            self.respond_unauthorized()
+        else:
+            self.respond_redirect(f'{parse.quote(self._path_only)}?login', connection='close')
 
     def do_PUT(self):
         self._split_path()
