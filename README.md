@@ -36,6 +36,7 @@ general options:
   -R, --auth-rule RULE  a rule for authentication, can be used multiple times [default: *]
   -q, --qrcode          show the qrcode
   -h, --help            show this help message and exit
+  -v, --version         show version number and exit
 
 tls options:
   --certfile CERTFILE   cert file
