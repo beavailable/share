@@ -1734,6 +1734,9 @@ def main():
     )
     general.add_argument('-q', '--qrcode', action='store_true', help='show the qrcode')
     general.add_argument('-h', '--help', action='help', help='show this help message and exit')
+    general.add_argument(
+        '-v', '--version', action='store_true', help='show version number and exit'
+    )
 
     tls = parser.add_argument_group('tls options')
     tls.add_argument('--certfile', help='cert file')
@@ -1741,6 +1744,9 @@ def main():
     tls.add_argument('--keypass', help='key password')
 
     args = parser.parse_args()
+    if args.version:
+        print('26.01.1')
+        return
     if args.password and len(args.password) < 3:
         raise ValueError('password is too short')
     if not args.receive:
