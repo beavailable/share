@@ -643,13 +643,13 @@ class BaseFileShareHandler(BaseHandler):
             '.container{height: 100%; display: flex; flex-direction: column; padding: 0 8px; overflow-wrap: break-word;}'
         )
         builder.append(
-            '.header{display: flex; justify-content: space-between; padding: 14px 0; font-size: xx-large;}'
+            '.header{display: flex; justify-content: space-between; padding: 16px 0; font-size: xx-large;}'
         )
         builder.append('hr{width: 100%;}')
         builder.append('.main{flex: auto; padding: 16px 0;}')
         builder.append('.content{width: 100%; height: 100%;}')
         builder.append(
-            '.list-item{display: flex; justify-content: space-between; padding: 2px 0; word-break: break-all;}'
+            '.list-item{display: flex; justify-content: space-between; padding: 4px 0; word-break: break-all;}'
         )
         builder.append('@media (prefers-color-scheme: light) {')
         builder.append('.list-item:nth-child(even){background-color: #f8f8f8;}')
@@ -667,7 +667,7 @@ class BaseFileShareHandler(BaseHandler):
         builder.append('a{color: #0b57d0; text-decoration: none;}')
         builder.append('a.hidden{color: #128bff;}')
         builder.append('a:hover{text-decoration: underline;}')
-        builder.append('.btn-download{display: block; height: 20px; margin-left: 4px;}')
+        builder.append('.btn-download{display: block; height: 20px; margin-left: 8px;}')
         builder.append('.btn-download:hover{background-color: #e6e6e6; border-radius: 50%;}')
         if self._upload:
             builder.append(
@@ -1037,7 +1037,7 @@ class FileReceiveHandler(BaseHandler):
         builder.end_title()
         builder.start_style()
         builder.append(
-            '.container{height: 80%; padding: 0 8px; display: flex; align-items: center; justify-content: center;}'
+            '.container{height: 100%; padding: 0 8px; display: flex; align-items: center; justify-content: center;}'
         )
         builder.append('@media (prefers-color-scheme: light) {')
         builder.append(
