@@ -4,6 +4,7 @@ Priority: optional
 Maintainer: beavailable <beavailable@proton.me>
 Build-Depends:
  debhelper-compat (= 13),
+ dpkg-build-api (= 1),
 Standards-Version: 4.7.2
 Homepage: https://github.com/beavailable/share
 
