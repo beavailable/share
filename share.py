@@ -234,7 +234,7 @@ class BaseHandler(BaseHTTPRequestHandler):
         except (FileExistsError, IsADirectoryError):
             self.respond_internal_server_error()
         else:
-            self.respond(HTTPStatus.OK, content_length='0')
+            self.respond(HTTPStatus.CREATED, content_length='0')
 
     def send_response(self, code, message=None):
         self.log_request(code)
